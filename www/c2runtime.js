@@ -19907,8 +19907,8 @@ cr.getObjectRefTable = function () { return [
 	cr.plugins_.CordovaAdmobPro.prototype.acts.onlyLoadInterstitial,
 	cr.plugins_.Button.prototype.cnds.OnClicked,
 	cr.plugins_.CordovaAdmobPro.prototype.acts.loadShowRewVid,
-	cr.plugins_.Touch.prototype.cnds.OnTouchObject,
 	cr.plugins_.CordovaAdmobPro.prototype.acts.loadInterstitial,
+	cr.plugins_.Touch.prototype.cnds.OnTouchObject,
 	cr.system_object.prototype.acts.RestartLayout,
 	cr.plugins_.Facebook.prototype.acts.LogIn2
 ];};
