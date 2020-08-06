@@ -9,7 +9,7 @@
 
 	<preference name="android-targetSdkVersion" value="28" />
 
-	<preference name="orientation" value="default" />
+	<preference name="orientation" value="landscape" />
 	<preference name="fullscreen" value="true" />
 	<preference name="DisallowOverscroll" value="true" />
 	<preference name="AllowInlineMediaPlayback" value="true" />
@@ -19,7 +19,7 @@
 	<config-file parent="UIViewControllerBasedStatusBarAppearance" platform="ios" target="*-Info.plist"><false/></config-file>
 
 
-	<preference name="deployment-target" value="7.0" />
+	<preference name="deployment-target" value="10.0" />
 	<preference name="android-minSdkVersion" value="15" />
 	<access origin="*" />
 	
