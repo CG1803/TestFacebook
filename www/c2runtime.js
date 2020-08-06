@@ -15220,6 +15220,808 @@ cr.system_object.prototype.loadFromJSON = function (o)
 cr.shaders = {};
 ;
 ;
+cr.plugins_.Browser = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var pluginProto = cr.plugins_.Browser.prototype;
+	pluginProto.Type = function(plugin)
+	{
+		this.plugin = plugin;
+		this.runtime = plugin.runtime;
+	};
+	var typeProto = pluginProto.Type.prototype;
+	typeProto.onCreate = function()
+	{
+	};
+	var offlineScriptReady = false;
+	var browserPluginReady = false;
+	document.addEventListener("DOMContentLoaded", function ()
+	{
+		if (window["C2_RegisterSW"] && navigator["serviceWorker"])
+		{
+			var offlineClientScript = document.createElement("script");
+			offlineClientScript.onload = function ()
+			{
+				offlineScriptReady = true;
+				checkReady()
+			};
+			offlineClientScript.src = "offlineClient.js";
+			document.head.appendChild(offlineClientScript);
+		}
+	});
+	var browserInstance = null;
+	typeProto.onAppBegin = function ()
+	{
+		browserPluginReady = true;
+		checkReady();
+	};
+	function checkReady()
+	{
+		if (offlineScriptReady && browserPluginReady && window["OfflineClientInfo"])
+		{
+			window["OfflineClientInfo"]["SetMessageCallback"](function (e)
+			{
+				browserInstance.onSWMessage(e);
+			});
+		}
+	};
+	pluginProto.Instance = function(type)
+	{
+		this.type = type;
+		this.runtime = type.runtime;
+	};
+	var instanceProto = pluginProto.Instance.prototype;
+	instanceProto.onCreate = function()
+	{
+		var self = this;
+		window.addEventListener("resize", function () {
+			self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnResize, self);
+		});
+		browserInstance = this;
+		if (typeof navigator.onLine !== "undefined")
+		{
+			window.addEventListener("online", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnOnline, self);
+			});
+			window.addEventListener("offline", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnOffline, self);
+			});
+		}
+		if (!this.runtime.isDirectCanvas)
+		{
+			document.addEventListener("appMobi.device.update.available", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnUpdateReady, self);
+			});
+			document.addEventListener("backbutton", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnBackButton, self);
+			});
+			document.addEventListener("menubutton", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnMenuButton, self);
+			});
+			document.addEventListener("searchbutton", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnSearchButton, self);
+			});
+			document.addEventListener("tizenhwkey", function (e) {
+				var ret;
+				switch (e["keyName"]) {
+				case "back":
+					ret = self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnBackButton, self);
+					if (!ret)
+					{
+						if (window["tizen"])
+							window["tizen"]["application"]["getCurrentApplication"]()["exit"]();
+					}
+					break;
+				case "menu":
+					ret = self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnMenuButton, self);
+					if (!ret)
+						e.preventDefault();
+					break;
+				}
+			});
+		}
+		if (this.runtime.isWindows10 && typeof Windows !== "undefined")
+		{
+			Windows["UI"]["Core"]["SystemNavigationManager"]["getForCurrentView"]().addEventListener("backrequested", function (e)
+			{
+				var ret = self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnBackButton, self);
+				if (ret)
+					e["handled"] = true;
+		    });
+		}
+		else if (this.runtime.isWinJS && WinJS["Application"])
+		{
+			WinJS["Application"]["onbackclick"] = function (e)
+			{
+				return !!self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnBackButton, self);
+			};
+		}
+		this.runtime.addSuspendCallback(function(s) {
+			if (s)
+			{
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnPageHidden, self);
+			}
+			else
+			{
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnPageVisible, self);
+			}
+		});
+		this.is_arcade = (typeof window["is_scirra_arcade"] !== "undefined");
+	};
+	instanceProto.onSWMessage = function (e)
+	{
+		var messageType = e["data"]["type"];
+		if (messageType === "downloading-update")
+			this.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnUpdateFound, this);
+		else if (messageType === "update-ready" || messageType === "update-pending")
+			this.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnUpdateReady, this);
+		else if (messageType === "offline-ready")
+			this.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnOfflineReady, this);
+	};
+	var batteryManager = null;
+	var loadedBatteryManager = false;
+	function maybeLoadBatteryManager()
+	{
+		if (loadedBatteryManager)
+			return;
+		if (!navigator["getBattery"])
+			return;
+		var promise = navigator["getBattery"]();
+		loadedBatteryManager = true;
+		if (promise)
+		{
+			promise.then(function (manager) {
+				batteryManager = manager;
+			});
+		}
+	};
+	function Cnds() {};
+	Cnds.prototype.CookiesEnabled = function()
+	{
+		return navigator ? navigator.cookieEnabled : false;
+	};
+	Cnds.prototype.IsOnline = function()
+	{
+		return navigator ? navigator.onLine : false;
+	};
+	Cnds.prototype.HasJava = function()
+	{
+		return navigator ? navigator.javaEnabled() : false;
+	};
+	Cnds.prototype.OnOnline = function()
+	{
+		return true;
+	};
+	Cnds.prototype.OnOffline = function()
+	{
+		return true;
+	};
+	Cnds.prototype.IsDownloadingUpdate = function ()
+	{
+		return false;		// deprecated
+	};
+	Cnds.prototype.OnUpdateReady = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.PageVisible = function ()
+	{
+		return !this.runtime.isSuspended;
+	};
+	Cnds.prototype.OnPageVisible = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnPageHidden = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnResize = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.IsFullscreen = function ()
+	{
+		return !!(document["mozFullScreen"] || document["webkitIsFullScreen"] || document["fullScreen"] || this.runtime.isNodeFullscreen);
+	};
+	Cnds.prototype.OnBackButton = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnMenuButton = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnSearchButton = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.IsMetered = function ()
+	{
+		var connection = navigator["connection"] || navigator["mozConnection"] || navigator["webkitConnection"];
+		if (!connection)
+			return false;
+		return !!connection["metered"];
+	};
+	Cnds.prototype.IsCharging = function ()
+	{
+		var battery = navigator["battery"] || navigator["mozBattery"] || navigator["webkitBattery"];
+		if (battery)
+		{
+			return !!battery["charging"]
+		}
+		else
+		{
+			maybeLoadBatteryManager();
+			if (batteryManager)
+			{
+				return !!batteryManager["charging"];
+			}
+			else
+			{
+				return true;		// if unknown, default to charging (powered)
+			}
+		}
+	};
+	Cnds.prototype.IsPortraitLandscape = function (p)
+	{
+		var current = (window.innerWidth <= window.innerHeight ? 0 : 1);
+		return current === p;
+	};
+	Cnds.prototype.SupportsFullscreen = function ()
+	{
+		if (this.runtime.isNodeWebkit)
+			return true;
+		var elem = this.runtime.canvasdiv || this.runtime.canvas;
+		return !!(elem["requestFullscreen"] || elem["mozRequestFullScreen"] || elem["msRequestFullscreen"] || elem["webkitRequestFullScreen"]);
+	};
+	Cnds.prototype.OnUpdateFound = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnUpdateReady = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnOfflineReady = function ()
+	{
+		return true;
+	};
+	pluginProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.Alert = function (msg)
+	{
+		if (!this.runtime.isDomFree)
+			alert(msg.toString());
+	};
+	Acts.prototype.Close = function ()
+	{
+		if (this.runtime.isCocoonJs)
+			CocoonJS["App"]["forceToFinish"]();
+		else if (window["tizen"])
+			window["tizen"]["application"]["getCurrentApplication"]()["exit"]();
+		else if (navigator["app"] && navigator["app"]["exitApp"])
+			navigator["app"]["exitApp"]();
+		else if (navigator["device"] && navigator["device"]["exitApp"])
+			navigator["device"]["exitApp"]();
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+			window.close();
+	};
+	Acts.prototype.Focus = function ()
+	{
+		if (this.runtime.isNodeWebkit)
+		{
+			var win = window["nwgui"]["Window"]["get"]();
+			win["focus"]();
+		}
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+			window.focus();
+	};
+	Acts.prototype.Blur = function ()
+	{
+		if (this.runtime.isNodeWebkit)
+		{
+			var win = window["nwgui"]["Window"]["get"]();
+			win["blur"]();
+		}
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+			window.blur();
+	};
+	Acts.prototype.GoBack = function ()
+	{
+		if (navigator["app"] && navigator["app"]["backHistory"])
+			navigator["app"]["backHistory"]();
+		else if (!this.is_arcade && !this.runtime.isDomFree && window.back)
+			window.back();
+	};
+	Acts.prototype.GoForward = function ()
+	{
+		if (!this.is_arcade && !this.runtime.isDomFree && window.forward)
+			window.forward();
+	};
+	Acts.prototype.GoHome = function ()
+	{
+		if (!this.is_arcade && !this.runtime.isDomFree && window.home)
+			window.home();
+	};
+	Acts.prototype.GoToURL = function (url, target)
+	{
+		if (this.runtime.isCocoonJs)
+			CocoonJS["App"]["openURL"](url);
+		else if (this.runtime.isEjecta)
+			ejecta["openURL"](url);
+		else if (this.runtime.isWinJS)
+			Windows["System"]["Launcher"]["launchUriAsync"](new Windows["Foundation"]["Uri"](url));
+		else if (navigator["app"] && navigator["app"]["loadUrl"])
+			navigator["app"]["loadUrl"](url, { "openExternal": true });
+		else if (this.runtime.isCordova)
+			window.open(url, "_system");
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+		{
+			if (target === 2 && !this.is_arcade)		// top
+				window.top.location = url;
+			else if (target === 1 && !this.is_arcade)	// parent
+				window.parent.location = url;
+			else					// self
+				window.location = url;
+		}
+	};
+	Acts.prototype.GoToURLWindow = function (url, tag)
+	{
+		if (this.runtime.isCocoonJs)
+			CocoonJS["App"]["openURL"](url);
+		else if (this.runtime.isEjecta)
+			ejecta["openURL"](url);
+		else if (this.runtime.isWinJS)
+			Windows["System"]["Launcher"]["launchUriAsync"](new Windows["Foundation"]["Uri"](url));
+		else if (navigator["app"] && navigator["app"]["loadUrl"])
+			navigator["app"]["loadUrl"](url, { "openExternal": true });
+		else if (this.runtime.isCordova)
+			window.open(url, "_system");
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+			window.open(url, tag);
+	};
+	Acts.prototype.Reload = function ()
+	{
+		if (!this.is_arcade && !this.runtime.isDomFree)
+			window.location.reload();
+	};
+	var firstRequestFullscreen = true;
+	var crruntime = null;
+	function onFullscreenError(e)
+	{
+		if (console && console.warn)
+			console.warn("Fullscreen request failed: ", e);
+		crruntime["setSize"](window.innerWidth, window.innerHeight);
+	};
+	Acts.prototype.RequestFullScreen = function (stretchmode)
+	{
+		if (this.runtime.isDomFree)
+		{
+			cr.logexport("[Construct 2] Requesting fullscreen is not supported on this platform - the request has been ignored");
+			return;
+		}
+		if (stretchmode >= 2)
+			stretchmode += 1;
+		if (stretchmode === 6)
+			stretchmode = 2;
+		if (this.runtime.isNodeWebkit)
+		{
+			if (this.runtime.isDebug)
+			{
+				debuggerFullscreen(true);
+			}
+			else if (!this.runtime.isNodeFullscreen && window["nwgui"])
+			{
+				window["nwgui"]["Window"]["get"]()["enterFullscreen"]();
+				this.runtime.isNodeFullscreen = true;
+				this.runtime.fullscreen_scaling = (stretchmode >= 2 ? stretchmode : 0);
+			}
+		}
+		else
+		{
+			if (document["mozFullScreen"] || document["webkitIsFullScreen"] || !!document["msFullscreenElement"] || document["fullScreen"] || document["fullScreenElement"])
+			{
+				return;
+			}
+			this.runtime.fullscreen_scaling = (stretchmode >= 2 ? stretchmode : 0);
+			var elem = document.documentElement;
+			if (firstRequestFullscreen)
+			{
+				firstRequestFullscreen = false;
+				crruntime = this.runtime;
+				elem.addEventListener("mozfullscreenerror", onFullscreenError);
+				elem.addEventListener("webkitfullscreenerror", onFullscreenError);
+				elem.addEventListener("MSFullscreenError", onFullscreenError);
+				elem.addEventListener("fullscreenerror", onFullscreenError);
+			}
+			if (elem["requestFullscreen"])
+				elem["requestFullscreen"]();
+			else if (elem["mozRequestFullScreen"])
+				elem["mozRequestFullScreen"]();
+			else if (elem["msRequestFullscreen"])
+				elem["msRequestFullscreen"]();
+			else if (elem["webkitRequestFullScreen"])
+			{
+				if (typeof Element !== "undefined" && typeof Element["ALLOW_KEYBOARD_INPUT"] !== "undefined")
+					elem["webkitRequestFullScreen"](Element["ALLOW_KEYBOARD_INPUT"]);
+				else
+					elem["webkitRequestFullScreen"]();
+			}
+		}
+	};
+	Acts.prototype.CancelFullScreen = function ()
+	{
+		if (this.runtime.isDomFree)
+		{
+			cr.logexport("[Construct 2] Exiting fullscreen is not supported on this platform - the request has been ignored");
+			return;
+		}
+		if (this.runtime.isNodeWebkit)
+		{
+			if (this.runtime.isDebug)
+			{
+				debuggerFullscreen(false);
+			}
+			else if (this.runtime.isNodeFullscreen && window["nwgui"])
+			{
+				window["nwgui"]["Window"]["get"]()["leaveFullscreen"]();
+				this.runtime.isNodeFullscreen = false;
+			}
+		}
+		else
+		{
+			if (document["exitFullscreen"])
+				document["exitFullscreen"]();
+			else if (document["mozCancelFullScreen"])
+				document["mozCancelFullScreen"]();
+			else if (document["msExitFullscreen"])
+				document["msExitFullscreen"]();
+			else if (document["webkitCancelFullScreen"])
+				document["webkitCancelFullScreen"]();
+		}
+	};
+	Acts.prototype.Vibrate = function (pattern_)
+	{
+		try {
+			var arr = pattern_.split(",");
+			var i, len;
+			for (i = 0, len = arr.length; i < len; i++)
+			{
+				arr[i] = parseInt(arr[i], 10);
+			}
+			if (navigator["vibrate"])
+				navigator["vibrate"](arr);
+			else if (navigator["mozVibrate"])
+				navigator["mozVibrate"](arr);
+			else if (navigator["webkitVibrate"])
+				navigator["webkitVibrate"](arr);
+			else if (navigator["msVibrate"])
+				navigator["msVibrate"](arr);
+		}
+		catch (e) {}
+	};
+	Acts.prototype.InvokeDownload = function (url_, filename_)
+	{
+		var a = document.createElement("a");
+		if (typeof a["download"] === "undefined")
+		{
+			window.open(url_);
+		}
+		else
+		{
+			var body = document.getElementsByTagName("body")[0];
+			a.textContent = filename_;
+			a.href = url_;
+			a["download"] = filename_;
+			body.appendChild(a);
+			var clickEvent = new MouseEvent("click");
+			a.dispatchEvent(clickEvent);
+			body.removeChild(a);
+		}
+	};
+	Acts.prototype.InvokeDownloadString = function (str_, mimetype_, filename_)
+	{
+		var datauri = "data:" + mimetype_ + "," + encodeURIComponent(str_);
+		var a = document.createElement("a");
+		if (typeof a["download"] === "undefined")
+		{
+			window.open(datauri);
+		}
+		else
+		{
+			var body = document.getElementsByTagName("body")[0];
+			a.textContent = filename_;
+			a.href = datauri;
+			a["download"] = filename_;
+			body.appendChild(a);
+			var clickEvent = new MouseEvent("click");
+			a.dispatchEvent(clickEvent);
+			body.removeChild(a);
+		}
+	};
+	Acts.prototype.ConsoleLog = function (type_, msg_)
+	{
+		if (typeof console === "undefined")
+			return;
+		if (type_ === 0 && console.log)
+			console.log(msg_.toString());
+		if (type_ === 1 && console.warn)
+			console.warn(msg_.toString());
+		if (type_ === 2 && console.error)
+			console.error(msg_.toString());
+	};
+	Acts.prototype.ConsoleGroup = function (name_)
+	{
+		if (console && console.group)
+			console.group(name_);
+	};
+	Acts.prototype.ConsoleGroupEnd = function ()
+	{
+		if (console && console.groupEnd)
+			console.groupEnd();
+	};
+	Acts.prototype.ExecJs = function (js_)
+	{
+		try {
+			if (eval)
+				eval(js_);
+		}
+		catch (e)
+		{
+			if (console && console.error)
+				console.error("Error executing Javascript: ", e);
+		}
+	};
+	var orientations = [
+		"portrait",
+		"landscape",
+		"portrait-primary",
+		"portrait-secondary",
+		"landscape-primary",
+		"landscape-secondary"
+	];
+	Acts.prototype.LockOrientation = function (o)
+	{
+		o = Math.floor(o);
+		if (o < 0 || o >= orientations.length)
+			return;
+		this.runtime.autoLockOrientation = false;
+		var orientation = orientations[o];
+		if (screen["orientation"] && screen["orientation"]["lock"])
+			screen["orientation"]["lock"](orientation);
+		else if (screen["lockOrientation"])
+			screen["lockOrientation"](orientation);
+		else if (screen["webkitLockOrientation"])
+			screen["webkitLockOrientation"](orientation);
+		else if (screen["mozLockOrientation"])
+			screen["mozLockOrientation"](orientation);
+		else if (screen["msLockOrientation"])
+			screen["msLockOrientation"](orientation);
+	};
+	Acts.prototype.UnlockOrientation = function ()
+	{
+		this.runtime.autoLockOrientation = false;
+		if (screen["orientation"] && screen["orientation"]["unlock"])
+			screen["orientation"]["unlock"]();
+		else if (screen["unlockOrientation"])
+			screen["unlockOrientation"]();
+		else if (screen["webkitUnlockOrientation"])
+			screen["webkitUnlockOrientation"]();
+		else if (screen["mozUnlockOrientation"])
+			screen["mozUnlockOrientation"]();
+		else if (screen["msUnlockOrientation"])
+			screen["msUnlockOrientation"]();
+	};
+	pluginProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.URL = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.toString());
+	};
+	Exps.prototype.Protocol = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.protocol);
+	};
+	Exps.prototype.Domain = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.hostname);
+	};
+	Exps.prototype.PathName = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.pathname);
+	};
+	Exps.prototype.Hash = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.hash);
+	};
+	Exps.prototype.Referrer = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : document.referrer);
+	};
+	Exps.prototype.Title = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : document.title);
+	};
+	Exps.prototype.Name = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : navigator.appName);
+	};
+	Exps.prototype.Version = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : navigator.appVersion);
+	};
+	Exps.prototype.Language = function (ret)
+	{
+		if (navigator && navigator.language)
+			ret.set_string(navigator.language);
+		else
+			ret.set_string("");
+	};
+	Exps.prototype.Platform = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : navigator.platform);
+	};
+	Exps.prototype.Product = function (ret)
+	{
+		if (navigator && navigator.product)
+			ret.set_string(navigator.product);
+		else
+			ret.set_string("");
+	};
+	Exps.prototype.Vendor = function (ret)
+	{
+		if (navigator && navigator.vendor)
+			ret.set_string(navigator.vendor);
+		else
+			ret.set_string("");
+	};
+	Exps.prototype.UserAgent = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : navigator.userAgent);
+	};
+	Exps.prototype.QueryString = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.search);
+	};
+	Exps.prototype.QueryParam = function (ret, paramname)
+	{
+		if (this.runtime.isDomFree)
+		{
+			ret.set_string("");
+			return;
+		}
+		var match = RegExp('[?&]' + paramname + '=([^&]*)').exec(window.location.search);
+		if (match)
+			ret.set_string(decodeURIComponent(match[1].replace(/\+/g, ' ')));
+		else
+			ret.set_string("");
+	};
+	Exps.prototype.Bandwidth = function (ret)
+	{
+		var connection = navigator["connection"] || navigator["mozConnection"] || navigator["webkitConnection"];
+		if (!connection)
+			ret.set_float(Number.POSITIVE_INFINITY);
+		else
+		{
+			if (typeof connection["bandwidth"] !== "undefined")
+				ret.set_float(connection["bandwidth"]);
+			else if (typeof connection["downlinkMax"] !== "undefined")
+				ret.set_float(connection["downlinkMax"]);
+			else
+				ret.set_float(Number.POSITIVE_INFINITY);
+		}
+	};
+	Exps.prototype.ConnectionType = function (ret)
+	{
+		var connection = navigator["connection"] || navigator["mozConnection"] || navigator["webkitConnection"];
+		if (!connection)
+			ret.set_string("unknown");
+		else
+		{
+			ret.set_string(connection["type"] || "unknown");
+		}
+	};
+	Exps.prototype.BatteryLevel = function (ret)
+	{
+		var battery = navigator["battery"] || navigator["mozBattery"] || navigator["webkitBattery"];
+		if (battery)
+		{
+			ret.set_float(battery["level"]);
+		}
+		else
+		{
+			maybeLoadBatteryManager();
+			if (batteryManager)
+			{
+				ret.set_float(batteryManager["level"]);
+			}
+			else
+			{
+				ret.set_float(1);		// not supported/unknown: assume charged
+			}
+		}
+	};
+	Exps.prototype.BatteryTimeLeft = function (ret)
+	{
+		var battery = navigator["battery"] || navigator["mozBattery"] || navigator["webkitBattery"];
+		if (battery)
+		{
+			ret.set_float(battery["dischargingTime"]);
+		}
+		else
+		{
+			maybeLoadBatteryManager();
+			if (batteryManager)
+			{
+				ret.set_float(batteryManager["dischargingTime"]);
+			}
+			else
+			{
+				ret.set_float(Number.POSITIVE_INFINITY);		// not supported/unknown: assume infinite time left
+			}
+		}
+	};
+	Exps.prototype.ExecJS = function (ret, js_)
+	{
+		if (!eval)
+		{
+			ret.set_any(0);
+			return;
+		}
+		var result = 0;
+		try {
+			result = eval(js_);
+		}
+		catch (e)
+		{
+			if (console && console.error)
+				console.error("Error executing Javascript: ", e);
+		}
+		if (typeof result === "number")
+			ret.set_any(result);
+		else if (typeof result === "string")
+			ret.set_any(result);
+		else if (typeof result === "boolean")
+			ret.set_any(result ? 1 : 0);
+		else
+			ret.set_any(0);
+	};
+	Exps.prototype.ScreenWidth = function (ret)
+	{
+		ret.set_int(screen.width);
+	};
+	Exps.prototype.ScreenHeight = function (ret)
+	{
+		ret.set_int(screen.height);
+	};
+	Exps.prototype.DevicePixelRatio = function (ret)
+	{
+		ret.set_float(this.runtime.devicePixelRatio);
+	};
+	Exps.prototype.WindowInnerWidth = function (ret)
+	{
+		ret.set_int(window.innerWidth);
+	};
+	Exps.prototype.WindowInnerHeight = function (ret)
+	{
+		ret.set_int(window.innerHeight);
+	};
+	Exps.prototype.WindowOuterWidth = function (ret)
+	{
+		ret.set_int(window.outerWidth);
+	};
+	Exps.prototype.WindowOuterHeight = function (ret)
+	{
+		ret.set_int(window.outerHeight);
+	};
+	pluginProto.exps = new Exps();
+}());
+;
+;
 cr.plugins_.Button = function(runtime)
 {
 	this.runtime = runtime;
@@ -15493,153 +16295,6 @@ cr.plugins_.Button = function(runtime)
 			return;
 		this.inputElem.checked = !this.inputElem.checked;
 	};
-	pluginProto.acts = new Acts();
-	function Exps() {};
-	pluginProto.exps = new Exps();
-}());
-;
-;
-cr.plugins_.CordovaAdmobPro = function(runtime)
-{
-	this.runtime = runtime;
-};
-(function ()
-{
-	var pluginProto = cr.plugins_.CordovaAdmobPro.prototype;
-	pluginProto.Type = function(plugin)
-	{
-		this.plugin = plugin;
-		this.runtime = plugin.runtime;
-	};
-	var typeProto = pluginProto.Type.prototype;
-	var admobid = {banner: "", interstitial: ""};
-	var isBannerShowing = false;
-	var isInterShowing = false;
-	var rewVidId = "";
-	var self;
-	typeProto.onCreate = function()
-	{
-	};
-	pluginProto.Instance = function(type)
-	{
-		this.type = type;
-		this.runtime = type.runtime;
-	};
-	var instanceProto = pluginProto.Instance.prototype;
-	instanceProto.onCreate = function()
-	{
-	self = this;
-	admobid = { banner: this.properties[0], interstitial: this.properties[1]};
-	rewVidId = this.properties[2];
-	document.addEventListener('onAdDismiss', function (data) {
-		if (data.adType == 'banner') {self.runtime.trigger(cr.plugins_.CordovaAdmobPro.prototype.cnds.onBannerAdDismissed, self); isBannerShowing=false;}
-		if (data.adType == 'interstitial') {self.runtime.trigger(cr.plugins_.CordovaAdmobPro.prototype.cnds.onInterstitialAdDismissed, self); isInterShowing=false;}
-		});
-	document.addEventListener('onAdLoaded', function (data) {
-		if (data.adType == 'banner') {self.runtime.trigger(cr.plugins_.CordovaAdmobPro.prototype.cnds.onBannerAdPreloaded, self);}
-		if (data.adType == 'interstitial') {self.runtime.trigger(cr.plugins_.CordovaAdmobPro.prototype.cnds.onInterstitialAdPreloaded, self);}
-		});
-	document.addEventListener('onAdFailLoad', function (data) {
-		if (data.adType == 'banner') {self.runtime.trigger(cr.plugins_.CordovaAdmobPro.prototype.cnds.onFailedBannerAd, self);}
-		if (data.adType == 'interstitial') {self.runtime.trigger(cr.plugins_.CordovaAdmobPro.prototype.cnds.onFailedInterstitialAd, self);}
-		});
-	document.addEventListener('onAdPresent', function (data) {
-		if (data.adType == 'banner') {isBannerShowing=true;}
-		if (data.adType == 'interstitial') {isInterShowing=true;}
-		});
-	};
-	function indexToSize(index) {
-		switch (index) {
-		case 0:		return "SMART_BANNER";
-		case 1:		return "BANNER";
-		case 2:		return "MEDIUM_RECTANGLE";
-		case 3:		return "FULL_BANNER";
-		case 4:		return "LEADERBOARD";
-		case 5:		return "SKYSCRAPER";
-		}
-	};
-	function indexToBoolean(index){
-		switch (index) {
-		case 0:		return true;
-		case 1:		return false;
-		}
-	}
-	function Cnds() {};
-	Cnds.prototype.onBannerAdDismissed = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.onBannerAdpreloaded = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.onFailedBannerAd = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.isShowingBannerAd = function ()
-	{
-		return isBannerShowing;
-	};
-	Cnds.prototype.onInterstitialAdPreloaded = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.onInterstitialAdDismissed = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.onFailedInterstitialAd = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.isShowingInterstitialAd = function ()
-	{
-		return isInterShowing;
-	};
-	pluginProto.cnds = new Cnds();
-	function Acts() {};
-	Acts.prototype.removeBanner = function ()
-	{
-		if (typeof window['AdMob'] == 'undefined') {return;}else{
-		window['AdMob'].removeBanner();}
-	}
-	Acts.prototype.loadBanner = function (pos, size, overlp, test)
-	{
-			if (typeof window['AdMob'] == 'undefined') {return;}else{
-		window['AdMob'].createBanner({adId: admobid.banner, adSize: indexToSize(size), position: pos+1, overlap: indexToBoolean(overlp), isTesting: indexToBoolean(test), autoShow: true});}
-	}
-	Acts.prototype.onlyLoadBanner = function (size, overlp, test)
-	{
-			if (typeof window['AdMob'] == 'undefined') {return;}else{
-			window['AdMob'].createBanner({adId: admobid.banner, adSize: indexToSize(size),
-			overlap: indexToBoolean(overlp), isTesting: indexToBoolean(test), autoShow: false});}
-	}
-	Acts.prototype.showBanner = function (pos)
-	{
-		if (typeof window['AdMob'] == 'undefined') {return;}else{
-		window['AdMob'].showBanner(pos+1);}
-	}
-	Acts.prototype.loadInterstitial = function (overlp, test)
-	{
-			if (typeof window['AdMob'] == 'undefined') {return;}else{
-			window['AdMob'].prepareInterstitial({adId: admobid.interstitial, isTesting: indexToBoolean(test), overlap: indexToBoolean(overlp), autoShow: true});}
-	}
-	Acts.prototype.onlyLoadInterstitial = function (overlp, test)
-	{
-			if (typeof window['AdMob'] == 'undefined') {return;}else{
-			window['AdMob'].prepareInterstitial({adId: admobid.interstitial, isTesting: indexToBoolean(test), overlap: indexToBoolean(overlp), autoShow: false});}
-	}
-	Acts.prototype.showInterstitial = function ()
-	{
-		if (typeof window['AdMob'] == 'undefined') {return;}else{
-		window['AdMob'].showInterstitial();}
-	}
-	Acts.prototype.loadShowRewVid = function (overlp, test)
-	{
-		if (typeof window['AdMob'] == 'undefined') {return;}else{
-		window['AdMob'].prepareRewardVideoAd({adId: rewVidId, isTesting: indexToBoolean(test), overlap: indexToBoolean(overlp), autoShow: true});}
-	}
 	pluginProto.acts = new Acts();
 	function Exps() {};
 	pluginProto.exps = new Exps();
@@ -16040,2493 +16695,13 @@ cr.plugins_.Facebook = function(runtime)
 }());
 ;
 ;
-cr.plugins_.Sprite = function(runtime)
+cr.plugins_.Function = function(runtime)
 {
 	this.runtime = runtime;
 };
 (function ()
 {
-	var pluginProto = cr.plugins_.Sprite.prototype;
-	pluginProto.Type = function(plugin)
-	{
-		this.plugin = plugin;
-		this.runtime = plugin.runtime;
-	};
-	var typeProto = pluginProto.Type.prototype;
-	function frame_getDataUri()
-	{
-		if (this.datauri.length === 0)
-		{
-			var tmpcanvas = document.createElement("canvas");
-			tmpcanvas.width = this.width;
-			tmpcanvas.height = this.height;
-			var tmpctx = tmpcanvas.getContext("2d");
-			if (this.spritesheeted)
-			{
-				tmpctx.drawImage(this.texture_img, this.offx, this.offy, this.width, this.height,
-										 0, 0, this.width, this.height);
-			}
-			else
-			{
-				tmpctx.drawImage(this.texture_img, 0, 0, this.width, this.height);
-			}
-			this.datauri = tmpcanvas.toDataURL("image/png");
-		}
-		return this.datauri;
-	};
-	typeProto.onCreate = function()
-	{
-		if (this.is_family)
-			return;
-		var i, leni, j, lenj;
-		var anim, frame, animobj, frameobj, wt, uv;
-		this.all_frames = [];
-		this.has_loaded_textures = false;
-		for (i = 0, leni = this.animations.length; i < leni; i++)
-		{
-			anim = this.animations[i];
-			animobj = {};
-			animobj.name = anim[0];
-			animobj.speed = anim[1];
-			animobj.loop = anim[2];
-			animobj.repeatcount = anim[3];
-			animobj.repeatto = anim[4];
-			animobj.pingpong = anim[5];
-			animobj.sid = anim[6];
-			animobj.frames = [];
-			for (j = 0, lenj = anim[7].length; j < lenj; j++)
-			{
-				frame = anim[7][j];
-				frameobj = {};
-				frameobj.texture_file = frame[0];
-				frameobj.texture_filesize = frame[1];
-				frameobj.offx = frame[2];
-				frameobj.offy = frame[3];
-				frameobj.width = frame[4];
-				frameobj.height = frame[5];
-				frameobj.duration = frame[6];
-				frameobj.hotspotX = frame[7];
-				frameobj.hotspotY = frame[8];
-				frameobj.image_points = frame[9];
-				frameobj.poly_pts = frame[10];
-				frameobj.pixelformat = frame[11];
-				frameobj.spritesheeted = (frameobj.width !== 0);
-				frameobj.datauri = "";		// generated on demand and cached
-				frameobj.getDataUri = frame_getDataUri;
-				uv = {};
-				uv.left = 0;
-				uv.top = 0;
-				uv.right = 1;
-				uv.bottom = 1;
-				frameobj.sheetTex = uv;
-				frameobj.webGL_texture = null;
-				wt = this.runtime.findWaitingTexture(frame[0]);
-				if (wt)
-				{
-					frameobj.texture_img = wt;
-				}
-				else
-				{
-					frameobj.texture_img = new Image();
-					frameobj.texture_img.cr_src = frame[0];
-					frameobj.texture_img.cr_filesize = frame[1];
-					frameobj.texture_img.c2webGL_texture = null;
-					this.runtime.waitForImageLoad(frameobj.texture_img, frame[0]);
-				}
-				cr.seal(frameobj);
-				animobj.frames.push(frameobj);
-				this.all_frames.push(frameobj);
-			}
-			cr.seal(animobj);
-			this.animations[i] = animobj;		// swap array data for object
-		}
-	};
-	typeProto.updateAllCurrentTexture = function ()
-	{
-		var i, len, inst;
-		for (i = 0, len = this.instances.length; i < len; i++)
-		{
-			inst = this.instances[i];
-			inst.curWebGLTexture = inst.curFrame.webGL_texture;
-		}
-	};
-	typeProto.onLostWebGLContext = function ()
-	{
-		if (this.is_family)
-			return;
-		var i, len, frame;
-		for (i = 0, len = this.all_frames.length; i < len; ++i)
-		{
-			frame = this.all_frames[i];
-			frame.texture_img.c2webGL_texture = null;
-			frame.webGL_texture = null;
-		}
-		this.has_loaded_textures = false;
-		this.updateAllCurrentTexture();
-	};
-	typeProto.onRestoreWebGLContext = function ()
-	{
-		if (this.is_family || !this.instances.length)
-			return;
-		var i, len, frame;
-		for (i = 0, len = this.all_frames.length; i < len; ++i)
-		{
-			frame = this.all_frames[i];
-			frame.webGL_texture = this.runtime.glwrap.loadTexture(frame.texture_img, false, this.runtime.linearSampling, frame.pixelformat);
-		}
-		this.updateAllCurrentTexture();
-	};
-	typeProto.loadTextures = function ()
-	{
-		if (this.is_family || this.has_loaded_textures || !this.runtime.glwrap)
-			return;
-		var i, len, frame;
-		for (i = 0, len = this.all_frames.length; i < len; ++i)
-		{
-			frame = this.all_frames[i];
-			frame.webGL_texture = this.runtime.glwrap.loadTexture(frame.texture_img, false, this.runtime.linearSampling, frame.pixelformat);
-		}
-		this.has_loaded_textures = true;
-	};
-	typeProto.unloadTextures = function ()
-	{
-		if (this.is_family || this.instances.length || !this.has_loaded_textures)
-			return;
-		var i, len, frame;
-		for (i = 0, len = this.all_frames.length; i < len; ++i)
-		{
-			frame = this.all_frames[i];
-			this.runtime.glwrap.deleteTexture(frame.webGL_texture);
-			frame.webGL_texture = null;
-		}
-		this.has_loaded_textures = false;
-	};
-	var already_drawn_images = [];
-	typeProto.preloadCanvas2D = function (ctx)
-	{
-		var i, len, frameimg;
-		cr.clearArray(already_drawn_images);
-		for (i = 0, len = this.all_frames.length; i < len; ++i)
-		{
-			frameimg = this.all_frames[i].texture_img;
-			if (already_drawn_images.indexOf(frameimg) !== -1)
-					continue;
-			ctx.drawImage(frameimg, 0, 0);
-			already_drawn_images.push(frameimg);
-		}
-	};
-	pluginProto.Instance = function(type)
-	{
-		this.type = type;
-		this.runtime = type.runtime;
-		var poly_pts = this.type.animations[0].frames[0].poly_pts;
-		if (this.recycled)
-			this.collision_poly.set_pts(poly_pts);
-		else
-			this.collision_poly = new cr.CollisionPoly(poly_pts);
-	};
-	var instanceProto = pluginProto.Instance.prototype;
-	instanceProto.onCreate = function()
-	{
-		this.visible = (this.properties[0] === 0);	// 0=visible, 1=invisible
-		this.isTicking = false;
-		this.inAnimTrigger = false;
-		this.collisionsEnabled = (this.properties[3] !== 0);
-		this.cur_animation = this.getAnimationByName(this.properties[1]) || this.type.animations[0];
-		this.cur_frame = this.properties[2];
-		if (this.cur_frame < 0)
-			this.cur_frame = 0;
-		if (this.cur_frame >= this.cur_animation.frames.length)
-			this.cur_frame = this.cur_animation.frames.length - 1;
-		var curanimframe = this.cur_animation.frames[this.cur_frame];
-		this.collision_poly.set_pts(curanimframe.poly_pts);
-		this.hotspotX = curanimframe.hotspotX;
-		this.hotspotY = curanimframe.hotspotY;
-		this.cur_anim_speed = this.cur_animation.speed;
-		this.cur_anim_repeatto = this.cur_animation.repeatto;
-		if (!(this.type.animations.length === 1 && this.type.animations[0].frames.length === 1) && this.cur_anim_speed !== 0)
-		{
-			this.runtime.tickMe(this);
-			this.isTicking = true;
-		}
-		if (this.recycled)
-			this.animTimer.reset();
-		else
-			this.animTimer = new cr.KahanAdder();
-		this.frameStart = this.getNowTime();
-		this.animPlaying = true;
-		this.animRepeats = 0;
-		this.animForwards = true;
-		this.animTriggerName = "";
-		this.changeAnimName = "";
-		this.changeAnimFrom = 0;
-		this.changeAnimFrame = -1;
-		this.type.loadTextures();
-		var i, leni, j, lenj;
-		var anim, frame, uv, maintex;
-		for (i = 0, leni = this.type.animations.length; i < leni; i++)
-		{
-			anim = this.type.animations[i];
-			for (j = 0, lenj = anim.frames.length; j < lenj; j++)
-			{
-				frame = anim.frames[j];
-				if (frame.width === 0)
-				{
-					frame.width = frame.texture_img.width;
-					frame.height = frame.texture_img.height;
-				}
-				if (frame.spritesheeted)
-				{
-					maintex = frame.texture_img;
-					uv = frame.sheetTex;
-					uv.left = frame.offx / maintex.width;
-					uv.top = frame.offy / maintex.height;
-					uv.right = (frame.offx + frame.width) / maintex.width;
-					uv.bottom = (frame.offy + frame.height) / maintex.height;
-					if (frame.offx === 0 && frame.offy === 0 && frame.width === maintex.width && frame.height === maintex.height)
-					{
-						frame.spritesheeted = false;
-					}
-				}
-			}
-		}
-		this.curFrame = this.cur_animation.frames[this.cur_frame];
-		this.curWebGLTexture = this.curFrame.webGL_texture;
-	};
-	instanceProto.saveToJSON = function ()
-	{
-		var o = {
-			"a": this.cur_animation.sid,
-			"f": this.cur_frame,
-			"cas": this.cur_anim_speed,
-			"fs": this.frameStart,
-			"ar": this.animRepeats,
-			"at": this.animTimer.sum,
-			"rt": this.cur_anim_repeatto
-		};
-		if (!this.animPlaying)
-			o["ap"] = this.animPlaying;
-		if (!this.animForwards)
-			o["af"] = this.animForwards;
-		return o;
-	};
-	instanceProto.loadFromJSON = function (o)
-	{
-		var anim = this.getAnimationBySid(o["a"]);
-		if (anim)
-			this.cur_animation = anim;
-		this.cur_frame = o["f"];
-		if (this.cur_frame < 0)
-			this.cur_frame = 0;
-		if (this.cur_frame >= this.cur_animation.frames.length)
-			this.cur_frame = this.cur_animation.frames.length - 1;
-		this.cur_anim_speed = o["cas"];
-		this.frameStart = o["fs"];
-		this.animRepeats = o["ar"];
-		this.animTimer.reset();
-		this.animTimer.sum = o["at"];
-		this.animPlaying = o.hasOwnProperty("ap") ? o["ap"] : true;
-		this.animForwards = o.hasOwnProperty("af") ? o["af"] : true;
-		if (o.hasOwnProperty("rt"))
-			this.cur_anim_repeatto = o["rt"];
-		else
-			this.cur_anim_repeatto = this.cur_animation.repeatto;
-		this.curFrame = this.cur_animation.frames[this.cur_frame];
-		this.curWebGLTexture = this.curFrame.webGL_texture;
-		this.collision_poly.set_pts(this.curFrame.poly_pts);
-		this.hotspotX = this.curFrame.hotspotX;
-		this.hotspotY = this.curFrame.hotspotY;
-	};
-	instanceProto.animationFinish = function (reverse)
-	{
-		this.cur_frame = reverse ? 0 : this.cur_animation.frames.length - 1;
-		this.animPlaying = false;
-		this.animTriggerName = this.cur_animation.name;
-		this.inAnimTrigger = true;
-		this.runtime.trigger(cr.plugins_.Sprite.prototype.cnds.OnAnyAnimFinished, this);
-		this.runtime.trigger(cr.plugins_.Sprite.prototype.cnds.OnAnimFinished, this);
-		this.inAnimTrigger = false;
-		this.animRepeats = 0;
-	};
-	instanceProto.getNowTime = function()
-	{
-		return this.animTimer.sum;
-	};
-	instanceProto.tick = function()
-	{
-		this.animTimer.add(this.runtime.getDt(this));
-		if (this.changeAnimName.length)
-			this.doChangeAnim();
-		if (this.changeAnimFrame >= 0)
-			this.doChangeAnimFrame();
-		var now = this.getNowTime();
-		var cur_animation = this.cur_animation;
-		var prev_frame = cur_animation.frames[this.cur_frame];
-		var next_frame;
-		var cur_frame_time = prev_frame.duration / this.cur_anim_speed;
-		if (this.animPlaying && now >= this.frameStart + cur_frame_time)
-		{
-			if (this.animForwards)
-			{
-				this.cur_frame++;
-			}
-			else
-			{
-				this.cur_frame--;
-			}
-			this.frameStart += cur_frame_time;
-			if (this.cur_frame >= cur_animation.frames.length)
-			{
-				if (cur_animation.pingpong)
-				{
-					this.animForwards = false;
-					this.cur_frame = cur_animation.frames.length - 2;
-				}
-				else if (cur_animation.loop)
-				{
-					this.cur_frame = this.cur_anim_repeatto;
-				}
-				else
-				{
-					this.animRepeats++;
-					if (this.animRepeats >= cur_animation.repeatcount)
-					{
-						this.animationFinish(false);
-					}
-					else
-					{
-						this.cur_frame = this.cur_anim_repeatto;
-					}
-				}
-			}
-			if (this.cur_frame < 0)
-			{
-				if (cur_animation.pingpong)
-				{
-					this.cur_frame = 1;
-					this.animForwards = true;
-					if (!cur_animation.loop)
-					{
-						this.animRepeats++;
-						if (this.animRepeats >= cur_animation.repeatcount)
-						{
-							this.animationFinish(true);
-						}
-					}
-				}
-				else
-				{
-					if (cur_animation.loop)
-					{
-						this.cur_frame = this.cur_anim_repeatto;
-					}
-					else
-					{
-						this.animRepeats++;
-						if (this.animRepeats >= cur_animation.repeatcount)
-						{
-							this.animationFinish(true);
-						}
-						else
-						{
-							this.cur_frame = this.cur_anim_repeatto;
-						}
-					}
-				}
-			}
-			if (this.cur_frame < 0)
-				this.cur_frame = 0;
-			else if (this.cur_frame >= cur_animation.frames.length)
-				this.cur_frame = cur_animation.frames.length - 1;
-			if (now > this.frameStart + (cur_animation.frames[this.cur_frame].duration / this.cur_anim_speed))
-			{
-				this.frameStart = now;
-			}
-			next_frame = cur_animation.frames[this.cur_frame];
-			this.OnFrameChanged(prev_frame, next_frame);
-			this.runtime.redraw = true;
-		}
-	};
-	instanceProto.getAnimationByName = function (name_)
-	{
-		var i, len, a;
-		for (i = 0, len = this.type.animations.length; i < len; i++)
-		{
-			a = this.type.animations[i];
-			if (cr.equals_nocase(a.name, name_))
-				return a;
-		}
-		return null;
-	};
-	instanceProto.getAnimationBySid = function (sid_)
-	{
-		var i, len, a;
-		for (i = 0, len = this.type.animations.length; i < len; i++)
-		{
-			a = this.type.animations[i];
-			if (a.sid === sid_)
-				return a;
-		}
-		return null;
-	};
-	instanceProto.doChangeAnim = function ()
-	{
-		var prev_frame = this.cur_animation.frames[this.cur_frame];
-		var anim = this.getAnimationByName(this.changeAnimName);
-		this.changeAnimName = "";
-		if (!anim)
-			return;
-		if (cr.equals_nocase(anim.name, this.cur_animation.name) && this.animPlaying)
-			return;
-		this.cur_animation = anim;
-		this.cur_anim_speed = anim.speed;
-		this.cur_anim_repeatto = anim.repeatto;
-		if (this.cur_frame < 0)
-			this.cur_frame = 0;
-		if (this.cur_frame >= this.cur_animation.frames.length)
-			this.cur_frame = this.cur_animation.frames.length - 1;
-		if (this.changeAnimFrom === 1)
-			this.cur_frame = 0;
-		this.animPlaying = true;
-		this.frameStart = this.getNowTime();
-		this.animForwards = true;
-		this.OnFrameChanged(prev_frame, this.cur_animation.frames[this.cur_frame]);
-		this.runtime.redraw = true;
-	};
-	instanceProto.doChangeAnimFrame = function ()
-	{
-		var prev_frame = this.cur_animation.frames[this.cur_frame];
-		var prev_frame_number = this.cur_frame;
-		this.cur_frame = cr.floor(this.changeAnimFrame);
-		if (this.cur_frame < 0)
-			this.cur_frame = 0;
-		if (this.cur_frame >= this.cur_animation.frames.length)
-			this.cur_frame = this.cur_animation.frames.length - 1;
-		if (prev_frame_number !== this.cur_frame)
-		{
-			this.OnFrameChanged(prev_frame, this.cur_animation.frames[this.cur_frame]);
-			this.frameStart = this.getNowTime();
-			this.runtime.redraw = true;
-		}
-		this.changeAnimFrame = -1;
-	};
-	instanceProto.OnFrameChanged = function (prev_frame, next_frame)
-	{
-		var oldw = prev_frame.width;
-		var oldh = prev_frame.height;
-		var neww = next_frame.width;
-		var newh = next_frame.height;
-		if (oldw != neww)
-			this.width *= (neww / oldw);
-		if (oldh != newh)
-			this.height *= (newh / oldh);
-		this.hotspotX = next_frame.hotspotX;
-		this.hotspotY = next_frame.hotspotY;
-		this.collision_poly.set_pts(next_frame.poly_pts);
-		this.set_bbox_changed();
-		this.curFrame = next_frame;
-		this.curWebGLTexture = next_frame.webGL_texture;
-		var i, len, b;
-		for (i = 0, len = this.behavior_insts.length; i < len; i++)
-		{
-			b = this.behavior_insts[i];
-			if (b.onSpriteFrameChanged)
-				b.onSpriteFrameChanged(prev_frame, next_frame);
-		}
-		this.runtime.trigger(cr.plugins_.Sprite.prototype.cnds.OnFrameChanged, this);
-	};
-	instanceProto.draw = function(ctx)
-	{
-		ctx.globalAlpha = this.opacity;
-		var cur_frame = this.curFrame;
-		var spritesheeted = cur_frame.spritesheeted;
-		var cur_image = cur_frame.texture_img;
-		var myx = this.x;
-		var myy = this.y;
-		var w = this.width;
-		var h = this.height;
-		if (this.angle === 0 && w >= 0 && h >= 0)
-		{
-			myx -= this.hotspotX * w;
-			myy -= this.hotspotY * h;
-			if (this.runtime.pixel_rounding)
-			{
-				myx = Math.round(myx);
-				myy = Math.round(myy);
-			}
-			if (spritesheeted)
-			{
-				ctx.drawImage(cur_image, cur_frame.offx, cur_frame.offy, cur_frame.width, cur_frame.height,
-										 myx, myy, w, h);
-			}
-			else
-			{
-				ctx.drawImage(cur_image, myx, myy, w, h);
-			}
-		}
-		else
-		{
-			if (this.runtime.pixel_rounding)
-			{
-				myx = Math.round(myx);
-				myy = Math.round(myy);
-			}
-			ctx.save();
-			var widthfactor = w > 0 ? 1 : -1;
-			var heightfactor = h > 0 ? 1 : -1;
-			ctx.translate(myx, myy);
-			if (widthfactor !== 1 || heightfactor !== 1)
-				ctx.scale(widthfactor, heightfactor);
-			ctx.rotate(this.angle * widthfactor * heightfactor);
-			var drawx = 0 - (this.hotspotX * cr.abs(w))
-			var drawy = 0 - (this.hotspotY * cr.abs(h));
-			if (spritesheeted)
-			{
-				ctx.drawImage(cur_image, cur_frame.offx, cur_frame.offy, cur_frame.width, cur_frame.height,
-										 drawx, drawy, cr.abs(w), cr.abs(h));
-			}
-			else
-			{
-				ctx.drawImage(cur_image, drawx, drawy, cr.abs(w), cr.abs(h));
-			}
-			ctx.restore();
-		}
-		/*
-		ctx.strokeStyle = "#f00";
-		ctx.lineWidth = 3;
-		ctx.beginPath();
-		this.collision_poly.cache_poly(this.width, this.height, this.angle);
-		var i, len, ax, ay, bx, by;
-		for (i = 0, len = this.collision_poly.pts_count; i < len; i++)
-		{
-			ax = this.collision_poly.pts_cache[i*2] + this.x;
-			ay = this.collision_poly.pts_cache[i*2+1] + this.y;
-			bx = this.collision_poly.pts_cache[((i+1)%len)*2] + this.x;
-			by = this.collision_poly.pts_cache[((i+1)%len)*2+1] + this.y;
-			ctx.moveTo(ax, ay);
-			ctx.lineTo(bx, by);
-		}
-		ctx.stroke();
-		ctx.closePath();
-		*/
-		/*
-		if (this.behavior_insts.length >= 1 && this.behavior_insts[0].draw)
-		{
-			this.behavior_insts[0].draw(ctx);
-		}
-		*/
-	};
-	instanceProto.drawGL_earlyZPass = function(glw)
-	{
-		this.drawGL(glw);
-	};
-	instanceProto.drawGL = function(glw)
-	{
-		glw.setTexture(this.curWebGLTexture);
-		glw.setOpacity(this.opacity);
-		var cur_frame = this.curFrame;
-		var q = this.bquad;
-		if (this.runtime.pixel_rounding)
-		{
-			var ox = Math.round(this.x) - this.x;
-			var oy = Math.round(this.y) - this.y;
-			if (cur_frame.spritesheeted)
-				glw.quadTex(q.tlx + ox, q.tly + oy, q.trx + ox, q.try_ + oy, q.brx + ox, q.bry + oy, q.blx + ox, q.bly + oy, cur_frame.sheetTex);
-			else
-				glw.quad(q.tlx + ox, q.tly + oy, q.trx + ox, q.try_ + oy, q.brx + ox, q.bry + oy, q.blx + ox, q.bly + oy);
-		}
-		else
-		{
-			if (cur_frame.spritesheeted)
-				glw.quadTex(q.tlx, q.tly, q.trx, q.try_, q.brx, q.bry, q.blx, q.bly, cur_frame.sheetTex);
-			else
-				glw.quad(q.tlx, q.tly, q.trx, q.try_, q.brx, q.bry, q.blx, q.bly);
-		}
-	};
-	instanceProto.getImagePointIndexByName = function(name_)
-	{
-		var cur_frame = this.curFrame;
-		var i, len;
-		for (i = 0, len = cur_frame.image_points.length; i < len; i++)
-		{
-			if (cr.equals_nocase(name_, cur_frame.image_points[i][0]))
-				return i;
-		}
-		return -1;
-	};
-	instanceProto.getImagePoint = function(imgpt, getX)
-	{
-		var cur_frame = this.curFrame;
-		var image_points = cur_frame.image_points;
-		var index;
-		if (cr.is_string(imgpt))
-			index = this.getImagePointIndexByName(imgpt);
-		else
-			index = imgpt - 1;	// 0 is origin
-		index = cr.floor(index);
-		if (index < 0 || index >= image_points.length)
-			return getX ? this.x : this.y;	// return origin
-		var x = (image_points[index][1] - cur_frame.hotspotX) * this.width;
-		var y = image_points[index][2];
-		y = (y - cur_frame.hotspotY) * this.height;
-		var cosa = Math.cos(this.angle);
-		var sina = Math.sin(this.angle);
-		var x_temp = (x * cosa) - (y * sina);
-		y = (y * cosa) + (x * sina);
-		x = x_temp;
-		x += this.x;
-		y += this.y;
-		return getX ? x : y;
-	};
-	function Cnds() {};
-	var arrCache = [];
-	function allocArr()
-	{
-		if (arrCache.length)
-			return arrCache.pop();
-		else
-			return [0, 0, 0];
-	};
-	function freeArr(a)
-	{
-		a[0] = 0;
-		a[1] = 0;
-		a[2] = 0;
-		arrCache.push(a);
-	};
-	function makeCollKey(a, b)
-	{
-		if (a < b)
-			return "" + a + "," + b;
-		else
-			return "" + b + "," + a;
-	};
-	function collmemory_add(collmemory, a, b, tickcount)
-	{
-		var a_uid = a.uid;
-		var b_uid = b.uid;
-		var key = makeCollKey(a_uid, b_uid);
-		if (collmemory.hasOwnProperty(key))
-		{
-			collmemory[key][2] = tickcount;
-			return;
-		}
-		var arr = allocArr();
-		arr[0] = a_uid;
-		arr[1] = b_uid;
-		arr[2] = tickcount;
-		collmemory[key] = arr;
-	};
-	function collmemory_remove(collmemory, a, b)
-	{
-		var key = makeCollKey(a.uid, b.uid);
-		if (collmemory.hasOwnProperty(key))
-		{
-			freeArr(collmemory[key]);
-			delete collmemory[key];
-		}
-	};
-	function collmemory_removeInstance(collmemory, inst)
-	{
-		var uid = inst.uid;
-		var p, entry;
-		for (p in collmemory)
-		{
-			if (collmemory.hasOwnProperty(p))
-			{
-				entry = collmemory[p];
-				if (entry[0] === uid || entry[1] === uid)
-				{
-					freeArr(collmemory[p]);
-					delete collmemory[p];
-				}
-			}
-		}
-	};
-	var last_coll_tickcount = -2;
-	function collmemory_has(collmemory, a, b)
-	{
-		var key = makeCollKey(a.uid, b.uid);
-		if (collmemory.hasOwnProperty(key))
-		{
-			last_coll_tickcount = collmemory[key][2];
-			return true;
-		}
-		else
-		{
-			last_coll_tickcount = -2;
-			return false;
-		}
-	};
-	var candidates1 = [];
-	Cnds.prototype.OnCollision = function (rtype)
-	{
-		if (!rtype)
-			return false;
-		var runtime = this.runtime;
-		var cnd = runtime.getCurrentCondition();
-		var ltype = cnd.type;
-		var collmemory = null;
-		if (cnd.extra["collmemory"])
-		{
-			collmemory = cnd.extra["collmemory"];
-		}
-		else
-		{
-			collmemory = {};
-			cnd.extra["collmemory"] = collmemory;
-		}
-		if (!cnd.extra["spriteCreatedDestroyCallback"])
-		{
-			cnd.extra["spriteCreatedDestroyCallback"] = true;
-			runtime.addDestroyCallback(function(inst) {
-				collmemory_removeInstance(cnd.extra["collmemory"], inst);
-			});
-		}
-		var lsol = ltype.getCurrentSol();
-		var rsol = rtype.getCurrentSol();
-		var linstances = lsol.getObjects();
-		var rinstances;
-		var registeredInstances;
-		var l, linst, r, rinst;
-		var curlsol, currsol;
-		var tickcount = this.runtime.tickcount;
-		var lasttickcount = tickcount - 1;
-		var exists, run;
-		var current_event = runtime.getCurrentEventStack().current_event;
-		var orblock = current_event.orblock;
-		for (l = 0; l < linstances.length; l++)
-		{
-			linst = linstances[l];
-			if (rsol.select_all)
-			{
-				linst.update_bbox();
-				this.runtime.getCollisionCandidates(linst.layer, rtype, linst.bbox, candidates1);
-				rinstances = candidates1;
-				this.runtime.addRegisteredCollisionCandidates(linst, rtype, rinstances);
-			}
-			else
-			{
-				rinstances = rsol.getObjects();
-			}
-			for (r = 0; r < rinstances.length; r++)
-			{
-				rinst = rinstances[r];
-				if (runtime.testOverlap(linst, rinst) || runtime.checkRegisteredCollision(linst, rinst))
-				{
-					exists = collmemory_has(collmemory, linst, rinst);
-					run = (!exists || (last_coll_tickcount < lasttickcount));
-					collmemory_add(collmemory, linst, rinst, tickcount);
-					if (run)
-					{
-						runtime.pushCopySol(current_event.solModifiers);
-						curlsol = ltype.getCurrentSol();
-						currsol = rtype.getCurrentSol();
-						curlsol.select_all = false;
-						currsol.select_all = false;
-						if (ltype === rtype)
-						{
-							curlsol.instances.length = 2;	// just use lsol, is same reference as rsol
-							curlsol.instances[0] = linst;
-							curlsol.instances[1] = rinst;
-							ltype.applySolToContainer();
-						}
-						else
-						{
-							curlsol.instances.length = 1;
-							currsol.instances.length = 1;
-							curlsol.instances[0] = linst;
-							currsol.instances[0] = rinst;
-							ltype.applySolToContainer();
-							rtype.applySolToContainer();
-						}
-						current_event.retrigger();
-						runtime.popSol(current_event.solModifiers);
-					}
-				}
-				else
-				{
-					collmemory_remove(collmemory, linst, rinst);
-				}
-			}
-			cr.clearArray(candidates1);
-		}
-		return false;
-	};
-	var rpicktype = null;
-	var rtopick = new cr.ObjectSet();
-	var needscollisionfinish = false;
-	var candidates2 = [];
-	var temp_bbox = new cr.rect(0, 0, 0, 0);
-	function DoOverlapCondition(rtype, offx, offy)
-	{
-		if (!rtype)
-			return false;
-		var do_offset = (offx !== 0 || offy !== 0);
-		var oldx, oldy, ret = false, r, lenr, rinst;
-		var cnd = this.runtime.getCurrentCondition();
-		var ltype = cnd.type;
-		var inverted = cnd.inverted;
-		var rsol = rtype.getCurrentSol();
-		var orblock = this.runtime.getCurrentEventStack().current_event.orblock;
-		var rinstances;
-		if (rsol.select_all)
-		{
-			this.update_bbox();
-			temp_bbox.copy(this.bbox);
-			temp_bbox.offset(offx, offy);
-			this.runtime.getCollisionCandidates(this.layer, rtype, temp_bbox, candidates2);
-			rinstances = candidates2;
-		}
-		else if (orblock)
-		{
-			if (this.runtime.isCurrentConditionFirst() && !rsol.else_instances.length && rsol.instances.length)
-				rinstances = rsol.instances;
-			else
-				rinstances = rsol.else_instances;
-		}
-		else
-		{
-			rinstances = rsol.instances;
-		}
-		rpicktype = rtype;
-		needscollisionfinish = (ltype !== rtype && !inverted);
-		if (do_offset)
-		{
-			oldx = this.x;
-			oldy = this.y;
-			this.x += offx;
-			this.y += offy;
-			this.set_bbox_changed();
-		}
-		for (r = 0, lenr = rinstances.length; r < lenr; r++)
-		{
-			rinst = rinstances[r];
-			if (this.runtime.testOverlap(this, rinst))
-			{
-				ret = true;
-				if (inverted)
-					break;
-				if (ltype !== rtype)
-					rtopick.add(rinst);
-			}
-		}
-		if (do_offset)
-		{
-			this.x = oldx;
-			this.y = oldy;
-			this.set_bbox_changed();
-		}
-		cr.clearArray(candidates2);
-		return ret;
-	};
-	typeProto.finish = function (do_pick)
-	{
-		if (!needscollisionfinish)
-			return;
-		if (do_pick)
-		{
-			var orblock = this.runtime.getCurrentEventStack().current_event.orblock;
-			var sol = rpicktype.getCurrentSol();
-			var topick = rtopick.valuesRef();
-			var i, len, inst;
-			if (sol.select_all)
-			{
-				sol.select_all = false;
-				cr.clearArray(sol.instances);
-				for (i = 0, len = topick.length; i < len; ++i)
-				{
-					sol.instances[i] = topick[i];
-				}
-				if (orblock)
-				{
-					cr.clearArray(sol.else_instances);
-					for (i = 0, len = rpicktype.instances.length; i < len; ++i)
-					{
-						inst = rpicktype.instances[i];
-						if (!rtopick.contains(inst))
-							sol.else_instances.push(inst);
-					}
-				}
-			}
-			else
-			{
-				if (orblock)
-				{
-					var initsize = sol.instances.length;
-					for (i = 0, len = topick.length; i < len; ++i)
-					{
-						sol.instances[initsize + i] = topick[i];
-						cr.arrayFindRemove(sol.else_instances, topick[i]);
-					}
-				}
-				else
-				{
-					cr.shallowAssignArray(sol.instances, topick);
-				}
-			}
-			rpicktype.applySolToContainer();
-		}
-		rtopick.clear();
-		needscollisionfinish = false;
-	};
-	Cnds.prototype.IsOverlapping = function (rtype)
-	{
-		return DoOverlapCondition.call(this, rtype, 0, 0);
-	};
-	Cnds.prototype.IsOverlappingOffset = function (rtype, offx, offy)
-	{
-		return DoOverlapCondition.call(this, rtype, offx, offy);
-	};
-	Cnds.prototype.IsAnimPlaying = function (animname)
-	{
-		if (this.changeAnimName.length)
-			return cr.equals_nocase(this.changeAnimName, animname);
-		else
-			return cr.equals_nocase(this.cur_animation.name, animname);
-	};
-	Cnds.prototype.CompareFrame = function (cmp, framenum)
-	{
-		return cr.do_cmp(this.cur_frame, cmp, framenum);
-	};
-	Cnds.prototype.CompareAnimSpeed = function (cmp, x)
-	{
-		var s = (this.animForwards ? this.cur_anim_speed : -this.cur_anim_speed);
-		return cr.do_cmp(s, cmp, x);
-	};
-	Cnds.prototype.OnAnimFinished = function (animname)
-	{
-		return cr.equals_nocase(this.animTriggerName, animname);
-	};
-	Cnds.prototype.OnAnyAnimFinished = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnFrameChanged = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.IsMirrored = function ()
-	{
-		return this.width < 0;
-	};
-	Cnds.prototype.IsFlipped = function ()
-	{
-		return this.height < 0;
-	};
-	Cnds.prototype.OnURLLoaded = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.IsCollisionEnabled = function ()
-	{
-		return this.collisionsEnabled;
-	};
-	pluginProto.cnds = new Cnds();
-	function Acts() {};
-	Acts.prototype.Spawn = function (obj, layer, imgpt)
-	{
-		if (!obj || !layer)
-			return;
-		var inst = this.runtime.createInstance(obj, layer, this.getImagePoint(imgpt, true), this.getImagePoint(imgpt, false));
-		if (!inst)
-			return;
-		if (typeof inst.angle !== "undefined")
-		{
-			inst.angle = this.angle;
-			inst.set_bbox_changed();
-		}
-		this.runtime.isInOnDestroy++;
-		var i, len, s;
-		this.runtime.trigger(Object.getPrototypeOf(obj.plugin).cnds.OnCreated, inst);
-		if (inst.is_contained)
-		{
-			for (i = 0, len = inst.siblings.length; i < len; i++)
-			{
-				s = inst.siblings[i];
-				this.runtime.trigger(Object.getPrototypeOf(s.type.plugin).cnds.OnCreated, s);
-			}
-		}
-		this.runtime.isInOnDestroy--;
-		var cur_act = this.runtime.getCurrentAction();
-		var reset_sol = false;
-		if (cr.is_undefined(cur_act.extra["Spawn_LastExec"]) || cur_act.extra["Spawn_LastExec"] < this.runtime.execcount)
-		{
-			reset_sol = true;
-			cur_act.extra["Spawn_LastExec"] = this.runtime.execcount;
-		}
-		var sol;
-		if (obj != this.type)
-		{
-			sol = obj.getCurrentSol();
-			sol.select_all = false;
-			if (reset_sol)
-			{
-				cr.clearArray(sol.instances);
-				sol.instances[0] = inst;
-			}
-			else
-				sol.instances.push(inst);
-			if (inst.is_contained)
-			{
-				for (i = 0, len = inst.siblings.length; i < len; i++)
-				{
-					s = inst.siblings[i];
-					sol = s.type.getCurrentSol();
-					sol.select_all = false;
-					if (reset_sol)
-					{
-						cr.clearArray(sol.instances);
-						sol.instances[0] = s;
-					}
-					else
-						sol.instances.push(s);
-				}
-			}
-		}
-	};
-	Acts.prototype.SetEffect = function (effect)
-	{
-		this.blend_mode = effect;
-		this.compositeOp = cr.effectToCompositeOp(effect);
-		cr.setGLBlend(this, effect, this.runtime.gl);
-		this.runtime.redraw = true;
-	};
-	Acts.prototype.StopAnim = function ()
-	{
-		this.animPlaying = false;
-	};
-	Acts.prototype.StartAnim = function (from)
-	{
-		this.animPlaying = true;
-		this.frameStart = this.getNowTime();
-		if (from === 1 && this.cur_frame !== 0)
-		{
-			this.changeAnimFrame = 0;
-			if (!this.inAnimTrigger)
-				this.doChangeAnimFrame();
-		}
-		if (!this.isTicking)
-		{
-			this.runtime.tickMe(this);
-			this.isTicking = true;
-		}
-	};
-	Acts.prototype.SetAnim = function (animname, from)
-	{
-		this.changeAnimName = animname;
-		this.changeAnimFrom = from;
-		if (!this.isTicking)
-		{
-			this.runtime.tickMe(this);
-			this.isTicking = true;
-		}
-		if (!this.inAnimTrigger)
-			this.doChangeAnim();
-	};
-	Acts.prototype.SetAnimFrame = function (framenumber)
-	{
-		this.changeAnimFrame = framenumber;
-		if (!this.isTicking)
-		{
-			this.runtime.tickMe(this);
-			this.isTicking = true;
-		}
-		if (!this.inAnimTrigger)
-			this.doChangeAnimFrame();
-	};
-	Acts.prototype.SetAnimSpeed = function (s)
-	{
-		this.cur_anim_speed = cr.abs(s);
-		this.animForwards = (s >= 0);
-		if (!this.isTicking)
-		{
-			this.runtime.tickMe(this);
-			this.isTicking = true;
-		}
-	};
-	Acts.prototype.SetAnimRepeatToFrame = function (s)
-	{
-		s = Math.floor(s);
-		if (s < 0)
-			s = 0;
-		if (s >= this.cur_animation.frames.length)
-			s = this.cur_animation.frames.length - 1;
-		this.cur_anim_repeatto = s;
-	};
-	Acts.prototype.SetMirrored = function (m)
-	{
-		var neww = cr.abs(this.width) * (m === 0 ? -1 : 1);
-		if (this.width === neww)
-			return;
-		this.width = neww;
-		this.set_bbox_changed();
-	};
-	Acts.prototype.SetFlipped = function (f)
-	{
-		var newh = cr.abs(this.height) * (f === 0 ? -1 : 1);
-		if (this.height === newh)
-			return;
-		this.height = newh;
-		this.set_bbox_changed();
-	};
-	Acts.prototype.SetScale = function (s)
-	{
-		var cur_frame = this.curFrame;
-		var mirror_factor = (this.width < 0 ? -1 : 1);
-		var flip_factor = (this.height < 0 ? -1 : 1);
-		var new_width = cur_frame.width * s * mirror_factor;
-		var new_height = cur_frame.height * s * flip_factor;
-		if (this.width !== new_width || this.height !== new_height)
-		{
-			this.width = new_width;
-			this.height = new_height;
-			this.set_bbox_changed();
-		}
-	};
-	Acts.prototype.LoadURL = function (url_, resize_, crossOrigin_)
-	{
-		var img = new Image();
-		var self = this;
-		var curFrame_ = this.curFrame;
-		img.onload = function ()
-		{
-			if (curFrame_.texture_img.src === img.src)
-			{
-				if (self.runtime.glwrap && self.curFrame === curFrame_)
-					self.curWebGLTexture = curFrame_.webGL_texture;
-				if (resize_ === 0)		// resize to image size
-				{
-					self.width = img.width;
-					self.height = img.height;
-					self.set_bbox_changed();
-				}
-				self.runtime.redraw = true;
-				self.runtime.trigger(cr.plugins_.Sprite.prototype.cnds.OnURLLoaded, self);
-				return;
-			}
-			curFrame_.texture_img = img;
-			curFrame_.offx = 0;
-			curFrame_.offy = 0;
-			curFrame_.width = img.width;
-			curFrame_.height = img.height;
-			curFrame_.spritesheeted = false;
-			curFrame_.datauri = "";
-			curFrame_.pixelformat = 0;	// reset to RGBA, since we don't know what type of image will have come in
-			if (self.runtime.glwrap)
-			{
-				if (curFrame_.webGL_texture)
-					self.runtime.glwrap.deleteTexture(curFrame_.webGL_texture);
-				curFrame_.webGL_texture = self.runtime.glwrap.loadTexture(img, false, self.runtime.linearSampling);
-				if (self.curFrame === curFrame_)
-					self.curWebGLTexture = curFrame_.webGL_texture;
-				self.type.updateAllCurrentTexture();
-			}
-			if (resize_ === 0)		// resize to image size
-			{
-				self.width = img.width;
-				self.height = img.height;
-				self.set_bbox_changed();
-			}
-			self.runtime.redraw = true;
-			self.runtime.trigger(cr.plugins_.Sprite.prototype.cnds.OnURLLoaded, self);
-		};
-		if (url_.substr(0, 5) !== "data:" && crossOrigin_ === 0)
-			img["crossOrigin"] = "anonymous";
-		this.runtime.setImageSrc(img, url_);
-	};
-	Acts.prototype.SetCollisions = function (set_)
-	{
-		if (this.collisionsEnabled === (set_ !== 0))
-			return;		// no change
-		this.collisionsEnabled = (set_ !== 0);
-		if (this.collisionsEnabled)
-			this.set_bbox_changed();		// needs to be added back to cells
-		else
-		{
-			if (this.collcells.right >= this.collcells.left)
-				this.type.collision_grid.update(this, this.collcells, null);
-			this.collcells.set(0, 0, -1, -1);
-		}
-	};
-	pluginProto.acts = new Acts();
-	function Exps() {};
-	Exps.prototype.AnimationFrame = function (ret)
-	{
-		ret.set_int(this.cur_frame);
-	};
-	Exps.prototype.AnimationFrameCount = function (ret)
-	{
-		ret.set_int(this.cur_animation.frames.length);
-	};
-	Exps.prototype.AnimationName = function (ret)
-	{
-		ret.set_string(this.cur_animation.name);
-	};
-	Exps.prototype.AnimationSpeed = function (ret)
-	{
-		ret.set_float(this.animForwards ? this.cur_anim_speed : -this.cur_anim_speed);
-	};
-	Exps.prototype.ImagePointX = function (ret, imgpt)
-	{
-		ret.set_float(this.getImagePoint(imgpt, true));
-	};
-	Exps.prototype.ImagePointY = function (ret, imgpt)
-	{
-		ret.set_float(this.getImagePoint(imgpt, false));
-	};
-	Exps.prototype.ImagePointCount = function (ret)
-	{
-		ret.set_int(this.curFrame.image_points.length);
-	};
-	Exps.prototype.ImageWidth = function (ret)
-	{
-		ret.set_float(this.curFrame.width);
-	};
-	Exps.prototype.ImageHeight = function (ret)
-	{
-		ret.set_float(this.curFrame.height);
-	};
-	pluginProto.exps = new Exps();
-}());
-;
-;
-cr.plugins_.Touch = function(runtime)
-{
-	this.runtime = runtime;
-};
-(function ()
-{
-	var pluginProto = cr.plugins_.Touch.prototype;
-	pluginProto.Type = function(plugin)
-	{
-		this.plugin = plugin;
-		this.runtime = plugin.runtime;
-	};
-	var typeProto = pluginProto.Type.prototype;
-	typeProto.onCreate = function()
-	{
-	};
-	pluginProto.Instance = function(type)
-	{
-		this.type = type;
-		this.runtime = type.runtime;
-		this.touches = [];
-		this.mouseDown = false;
-	};
-	var instanceProto = pluginProto.Instance.prototype;
-	var dummyoffset = {left: 0, top: 0};
-	instanceProto.findTouch = function (id)
-	{
-		var i, len;
-		for (i = 0, len = this.touches.length; i < len; i++)
-		{
-			if (this.touches[i]["id"] === id)
-				return i;
-		}
-		return -1;
-	};
-	var appmobi_accx = 0;
-	var appmobi_accy = 0;
-	var appmobi_accz = 0;
-	function AppMobiGetAcceleration(evt)
-	{
-		appmobi_accx = evt.x;
-		appmobi_accy = evt.y;
-		appmobi_accz = evt.z;
-	};
-	var pg_accx = 0;
-	var pg_accy = 0;
-	var pg_accz = 0;
-	function PhoneGapGetAcceleration(evt)
-	{
-		pg_accx = evt.x;
-		pg_accy = evt.y;
-		pg_accz = evt.z;
-	};
-	var theInstance = null;
-	var touchinfo_cache = [];
-	function AllocTouchInfo(x, y, id, index)
-	{
-		var ret;
-		if (touchinfo_cache.length)
-			ret = touchinfo_cache.pop();
-		else
-			ret = new TouchInfo();
-		ret.init(x, y, id, index);
-		return ret;
-	};
-	function ReleaseTouchInfo(ti)
-	{
-		if (touchinfo_cache.length < 100)
-			touchinfo_cache.push(ti);
-	};
-	var GESTURE_HOLD_THRESHOLD = 15;		// max px motion for hold gesture to register
-	var GESTURE_HOLD_TIMEOUT = 500;			// time for hold gesture to register
-	var GESTURE_TAP_TIMEOUT = 333;			// time for tap gesture to register
-	var GESTURE_DOUBLETAP_THRESHOLD = 25;	// max distance apart for taps to be
-	function TouchInfo()
-	{
-		this.starttime = 0;
-		this.time = 0;
-		this.lasttime = 0;
-		this.startx = 0;
-		this.starty = 0;
-		this.x = 0;
-		this.y = 0;
-		this.lastx = 0;
-		this.lasty = 0;
-		this["id"] = 0;
-		this.startindex = 0;
-		this.triggeredHold = false;
-		this.tooFarForHold = false;
-	};
-	TouchInfo.prototype.init = function (x, y, id, index)
-	{
-		var nowtime = cr.performance_now();
-		this.time = nowtime;
-		this.lasttime = nowtime;
-		this.starttime = nowtime;
-		this.startx = x;
-		this.starty = y;
-		this.x = x;
-		this.y = y;
-		this.lastx = x;
-		this.lasty = y;
-		this.width = 0;
-		this.height = 0;
-		this.pressure = 0;
-		this["id"] = id;
-		this.startindex = index;
-		this.triggeredHold = false;
-		this.tooFarForHold = false;
-	};
-	TouchInfo.prototype.update = function (nowtime, x, y, width, height, pressure)
-	{
-		this.lasttime = this.time;
-		this.time = nowtime;
-		this.lastx = this.x;
-		this.lasty = this.y;
-		this.x = x;
-		this.y = y;
-		this.width = width;
-		this.height = height;
-		this.pressure = pressure;
-		if (!this.tooFarForHold && cr.distanceTo(this.startx, this.starty, this.x, this.y) >= GESTURE_HOLD_THRESHOLD)
-		{
-			this.tooFarForHold = true;
-		}
-	};
-	TouchInfo.prototype.maybeTriggerHold = function (inst, index)
-	{
-		if (this.triggeredHold)
-			return;		// already triggered this gesture
-		var nowtime = cr.performance_now();
-		if (nowtime - this.starttime >= GESTURE_HOLD_TIMEOUT && !this.tooFarForHold && cr.distanceTo(this.startx, this.starty, this.x, this.y) < GESTURE_HOLD_THRESHOLD)
-		{
-			this.triggeredHold = true;
-			inst.trigger_index = this.startindex;
-			inst.trigger_id = this["id"];
-			inst.getTouchIndex = index;
-			inst.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnHoldGesture, inst);
-			inst.curTouchX = this.x;
-			inst.curTouchY = this.y;
-			inst.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnHoldGestureObject, inst);
-			inst.getTouchIndex = 0;
-		}
-	};
-	var lastTapX = -1000;
-	var lastTapY = -1000;
-	var lastTapTime = -10000;
-	TouchInfo.prototype.maybeTriggerTap = function (inst, index)
-	{
-		if (this.triggeredHold)
-			return;
-		var nowtime = cr.performance_now();
-		if (nowtime - this.starttime <= GESTURE_TAP_TIMEOUT && !this.tooFarForHold && cr.distanceTo(this.startx, this.starty, this.x, this.y) < GESTURE_HOLD_THRESHOLD)
-		{
-			inst.trigger_index = this.startindex;
-			inst.trigger_id = this["id"];
-			inst.getTouchIndex = index;
-			if ((nowtime - lastTapTime <= GESTURE_TAP_TIMEOUT * 2) && cr.distanceTo(lastTapX, lastTapY, this.x, this.y) < GESTURE_DOUBLETAP_THRESHOLD)
-			{
-				inst.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnDoubleTapGesture, inst);
-				inst.curTouchX = this.x;
-				inst.curTouchY = this.y;
-				inst.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnDoubleTapGestureObject, inst);
-				lastTapX = -1000;
-				lastTapY = -1000;
-				lastTapTime = -10000;
-			}
-			else
-			{
-				inst.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnTapGesture, inst);
-				inst.curTouchX = this.x;
-				inst.curTouchY = this.y;
-				inst.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnTapGestureObject, inst);
-				lastTapX = this.x;
-				lastTapY = this.y;
-				lastTapTime = nowtime;
-			}
-			inst.getTouchIndex = 0;
-		}
-	};
-	instanceProto.onCreate = function()
-	{
-		theInstance = this;
-		this.isWindows8 = !!(typeof window["c2isWindows8"] !== "undefined" && window["c2isWindows8"]);
-		this.orient_alpha = 0;
-		this.orient_beta = 0;
-		this.orient_gamma = 0;
-		this.acc_g_x = 0;
-		this.acc_g_y = 0;
-		this.acc_g_z = 0;
-		this.acc_x = 0;
-		this.acc_y = 0;
-		this.acc_z = 0;
-		this.curTouchX = 0;
-		this.curTouchY = 0;
-		this.trigger_index = 0;
-		this.trigger_id = 0;
-		this.trigger_permission = 0;
-		this.getTouchIndex = 0;
-		this.useMouseInput = (this.properties[0] !== 0);
-		var elem = (this.runtime.fullscreen_mode > 0) ? document : this.runtime.canvas;
-		var elem2 = document;
-		if (this.runtime.isDirectCanvas)
-			elem2 = elem = window["Canvas"];
-		else if (this.runtime.isCocoonJs)
-			elem2 = elem = window;
-		var self = this;
-		if (typeof PointerEvent !== "undefined")
-		{
-			elem.addEventListener("pointerdown",
-				function(info) {
-					self.onPointerStart(info);
-				},
-				false
-			);
-			elem.addEventListener("pointermove",
-				function(info) {
-					self.onPointerMove(info);
-				},
-				false
-			);
-			elem2.addEventListener("pointerup",
-				function(info) {
-					self.onPointerEnd(info, false);
-				},
-				false
-			);
-			elem2.addEventListener("pointercancel",
-				function(info) {
-					self.onPointerEnd(info, true);
-				},
-				false
-			);
-			if (this.runtime.canvas)
-			{
-				this.runtime.canvas.addEventListener("MSGestureHold", function(e) {
-					e.preventDefault();
-				}, false);
-				document.addEventListener("MSGestureHold", function(e) {
-					e.preventDefault();
-				}, false);
-				this.runtime.canvas.addEventListener("gesturehold", function(e) {
-					e.preventDefault();
-				}, false);
-				document.addEventListener("gesturehold", function(e) {
-					e.preventDefault();
-				}, false);
-			}
-		}
-		else if (window.navigator["msPointerEnabled"])
-		{
-			elem.addEventListener("MSPointerDown",
-				function(info) {
-					self.onPointerStart(info);
-				},
-				false
-			);
-			elem.addEventListener("MSPointerMove",
-				function(info) {
-					self.onPointerMove(info);
-				},
-				false
-			);
-			elem2.addEventListener("MSPointerUp",
-				function(info) {
-					self.onPointerEnd(info, false);
-				},
-				false
-			);
-			elem2.addEventListener("MSPointerCancel",
-				function(info) {
-					self.onPointerEnd(info, true);
-				},
-				false
-			);
-			if (this.runtime.canvas)
-			{
-				this.runtime.canvas.addEventListener("MSGestureHold", function(e) {
-					e.preventDefault();
-				}, false);
-				document.addEventListener("MSGestureHold", function(e) {
-					e.preventDefault();
-				}, false);
-			}
-		}
-		else
-		{
-			elem.addEventListener("touchstart",
-				function(info) {
-					self.onTouchStart(info);
-				},
-				false
-			);
-			elem.addEventListener("touchmove",
-				function(info) {
-					self.onTouchMove(info);
-				},
-				false
-			);
-			elem2.addEventListener("touchend",
-				function(info) {
-					self.onTouchEnd(info, false);
-				},
-				false
-			);
-			elem2.addEventListener("touchcancel",
-				function(info) {
-					self.onTouchEnd(info, true);
-				},
-				false
-			);
-		}
-		if (this.isWindows8)
-		{
-			var win8accelerometerFn = function(e) {
-					var reading = e["reading"];
-					self.acc_x = reading["accelerationX"];
-					self.acc_y = reading["accelerationY"];
-					self.acc_z = reading["accelerationZ"];
-				};
-			var win8inclinometerFn = function(e) {
-					var reading = e["reading"];
-					self.orient_alpha = reading["yawDegrees"];
-					self.orient_beta = reading["pitchDegrees"];
-					self.orient_gamma = reading["rollDegrees"];
-				};
-			var accelerometer = Windows["Devices"]["Sensors"]["Accelerometer"]["getDefault"]();
-            if (accelerometer)
-			{
-                accelerometer["reportInterval"] = Math.max(accelerometer["minimumReportInterval"], 16);
-				accelerometer.addEventListener("readingchanged", win8accelerometerFn);
-            }
-			var inclinometer = Windows["Devices"]["Sensors"]["Inclinometer"]["getDefault"]();
-			if (inclinometer)
-			{
-				inclinometer["reportInterval"] = Math.max(inclinometer["minimumReportInterval"], 16);
-				inclinometer.addEventListener("readingchanged", win8inclinometerFn);
-			}
-			document.addEventListener("visibilitychange", function(e) {
-				if (document["hidden"] || document["msHidden"])
-				{
-					if (accelerometer)
-						accelerometer.removeEventListener("readingchanged", win8accelerometerFn);
-					if (inclinometer)
-						inclinometer.removeEventListener("readingchanged", win8inclinometerFn);
-				}
-				else
-				{
-					if (accelerometer)
-						accelerometer.addEventListener("readingchanged", win8accelerometerFn);
-					if (inclinometer)
-						inclinometer.addEventListener("readingchanged", win8inclinometerFn);
-				}
-			}, false);
-		}
-		else
-		{
-			window.addEventListener("deviceorientation", function (eventData) {
-				self.orient_alpha = eventData["alpha"] || 0;
-				self.orient_beta = eventData["beta"] || 0;
-				self.orient_gamma = eventData["gamma"] || 0;
-			}, false);
-			window.addEventListener("devicemotion", function (eventData) {
-				if (eventData["accelerationIncludingGravity"])
-				{
-					self.acc_g_x = eventData["accelerationIncludingGravity"]["x"] || 0;
-					self.acc_g_y = eventData["accelerationIncludingGravity"]["y"] || 0;
-					self.acc_g_z = eventData["accelerationIncludingGravity"]["z"] || 0;
-				}
-				if (eventData["acceleration"])
-				{
-					self.acc_x = eventData["acceleration"]["x"] || 0;
-					self.acc_y = eventData["acceleration"]["y"] || 0;
-					self.acc_z = eventData["acceleration"]["z"] || 0;
-				}
-			}, false);
-		}
-		if (this.useMouseInput && !this.runtime.isDomFree)
-		{
-			jQuery(document).mousemove(
-				function(info) {
-					self.onMouseMove(info);
-				}
-			);
-			jQuery(document).mousedown(
-				function(info) {
-					self.onMouseDown(info);
-				}
-			);
-			jQuery(document).mouseup(
-				function(info) {
-					self.onMouseUp(info);
-				}
-			);
-		}
-		if (!this.runtime.isiOS && this.runtime.isCordova && navigator["accelerometer"] && navigator["accelerometer"]["watchAcceleration"])
-		{
-			navigator["accelerometer"]["watchAcceleration"](PhoneGapGetAcceleration, null, { "frequency": 40 });
-		}
-		this.runtime.tick2Me(this);
-	};
-	instanceProto.onPointerMove = function (info)
-	{
-		if (info["pointerType"] === info["MSPOINTER_TYPE_MOUSE"] || info["pointerType"] === "mouse")
-			return;
-		if (info.preventDefault)
-			info.preventDefault();
-		var i = this.findTouch(info["pointerId"]);
-		var nowtime = cr.performance_now();
-		if (i >= 0)
-		{
-			var offset = this.runtime.isDomFree ? dummyoffset : jQuery(this.runtime.canvas).offset();
-			var t = this.touches[i];
-			if (nowtime - t.time < 2)
-				return;
-			t.update(nowtime, info.pageX - offset.left, info.pageY - offset.top, info.width || 0, info.height || 0, info.pressure || 0);
-		}
-	};
-	instanceProto.onPointerStart = function (info)
-	{
-		if (info["pointerType"] === info["MSPOINTER_TYPE_MOUSE"] || info["pointerType"] === "mouse")
-			return;
-		if (info.preventDefault && cr.isCanvasInputEvent(info))
-			info.preventDefault();
-		var offset = this.runtime.isDomFree ? dummyoffset : jQuery(this.runtime.canvas).offset();
-		var touchx = info.pageX - offset.left;
-		var touchy = info.pageY - offset.top;
-		var nowtime = cr.performance_now();
-		this.trigger_index = this.touches.length;
-		this.trigger_id = info["pointerId"];
-		this.touches.push(AllocTouchInfo(touchx, touchy, info["pointerId"], this.trigger_index));
-		this.runtime.isInUserInputEvent = true;
-		this.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnNthTouchStart, this);
-		this.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnTouchStart, this);
-		this.curTouchX = touchx;
-		this.curTouchY = touchy;
-		this.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnTouchObject, this);
-		this.runtime.isInUserInputEvent = false;
-	};
-	instanceProto.onPointerEnd = function (info, isCancel)
-	{
-		if (info["pointerType"] === info["MSPOINTER_TYPE_MOUSE"] || info["pointerType"] === "mouse")
-			return;
-		if (info.preventDefault && cr.isCanvasInputEvent(info))
-			info.preventDefault();
-		var i = this.findTouch(info["pointerId"]);
-		this.trigger_index = (i >= 0 ? this.touches[i].startindex : -1);
-		this.trigger_id = (i >= 0 ? this.touches[i]["id"] : -1);
-		this.runtime.isInUserInputEvent = true;
-		this.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnNthTouchEnd, this);
-		this.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnTouchEnd, this);
-		if (i >= 0)
-		{
-			if (!isCancel)
-				this.touches[i].maybeTriggerTap(this, i);
-			ReleaseTouchInfo(this.touches[i]);
-			this.touches.splice(i, 1);
-		}
-		this.runtime.isInUserInputEvent = false;
-	};
-	instanceProto.onTouchMove = function (info)
-	{
-		if (info.preventDefault)
-			info.preventDefault();
-		var nowtime = cr.performance_now();
-		var i, len, t, u;
-		for (i = 0, len = info.changedTouches.length; i < len; i++)
-		{
-			t = info.changedTouches[i];
-			var j = this.findTouch(t["identifier"]);
-			if (j >= 0)
-			{
-				var offset = this.runtime.isDomFree ? dummyoffset : jQuery(this.runtime.canvas).offset();
-				u = this.touches[j];
-				if (nowtime - u.time < 2)
-					continue;
-				var touchWidth = (t.radiusX || t.webkitRadiusX || t.mozRadiusX || t.msRadiusX || 0) * 2;
-				var touchHeight = (t.radiusY || t.webkitRadiusY || t.mozRadiusY || t.msRadiusY || 0) * 2;
-				var touchForce = t.force || t.webkitForce || t.mozForce || t.msForce || 0;
-				u.update(nowtime, t.pageX - offset.left, t.pageY - offset.top, touchWidth, touchHeight, touchForce);
-			}
-		}
-	};
-	instanceProto.onTouchStart = function (info)
-	{
-		if (info.preventDefault && cr.isCanvasInputEvent(info))
-			info.preventDefault();
-		var offset = this.runtime.isDomFree ? dummyoffset : jQuery(this.runtime.canvas).offset();
-		var nowtime = cr.performance_now();
-		this.runtime.isInUserInputEvent = true;
-		var i, len, t, j;
-		for (i = 0, len = info.changedTouches.length; i < len; i++)
-		{
-			t = info.changedTouches[i];
-			j = this.findTouch(t["identifier"]);
-			if (j !== -1)
-				continue;
-			var touchx = t.pageX - offset.left;
-			var touchy = t.pageY - offset.top;
-			this.trigger_index = this.touches.length;
-			this.trigger_id = t["identifier"];
-			this.touches.push(AllocTouchInfo(touchx, touchy, t["identifier"], this.trigger_index));
-			this.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnNthTouchStart, this);
-			this.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnTouchStart, this);
-			this.curTouchX = touchx;
-			this.curTouchY = touchy;
-			this.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnTouchObject, this);
-		}
-		this.runtime.isInUserInputEvent = false;
-	};
-	instanceProto.onTouchEnd = function (info, isCancel)
-	{
-		if (info.preventDefault && cr.isCanvasInputEvent(info))
-			info.preventDefault();
-		this.runtime.isInUserInputEvent = true;
-		var i, len, t, j;
-		for (i = 0, len = info.changedTouches.length; i < len; i++)
-		{
-			t = info.changedTouches[i];
-			j = this.findTouch(t["identifier"]);
-			if (j >= 0)
-			{
-				this.trigger_index = this.touches[j].startindex;
-				this.trigger_id = this.touches[j]["id"];
-				this.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnNthTouchEnd, this);
-				this.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnTouchEnd, this);
-				if (!isCancel)
-					this.touches[j].maybeTriggerTap(this, j);
-				ReleaseTouchInfo(this.touches[j]);
-				this.touches.splice(j, 1);
-			}
-		}
-		this.runtime.isInUserInputEvent = false;
-	};
-	instanceProto.getAlpha = function ()
-	{
-		if (this.runtime.isCordova && this.orient_alpha === 0 && pg_accz !== 0)
-			return pg_accz * 90;
-		else
-			return this.orient_alpha;
-	};
-	instanceProto.getBeta = function ()
-	{
-		if (this.runtime.isCordova && this.orient_beta === 0 && pg_accy !== 0)
-			return pg_accy * 90;
-		else
-			return this.orient_beta;
-	};
-	instanceProto.getGamma = function ()
-	{
-		if (this.runtime.isCordova && this.orient_gamma === 0 && pg_accx !== 0)
-			return pg_accx * 90;
-		else
-			return this.orient_gamma;
-	};
-	var noop_func = function(){};
-	function isCompatibilityMouseEvent(e)
-	{
-		return (e["sourceCapabilities"] && e["sourceCapabilities"]["firesTouchEvents"]) ||
-				(e.originalEvent && e.originalEvent["sourceCapabilities"] && e.originalEvent["sourceCapabilities"]["firesTouchEvents"]);
-	};
-	instanceProto.onMouseDown = function(info)
-	{
-		if (isCompatibilityMouseEvent(info))
-			return;
-		var t = { pageX: info.pageX, pageY: info.pageY, "identifier": 0 };
-		var fakeinfo = { changedTouches: [t] };
-		this.onTouchStart(fakeinfo);
-		this.mouseDown = true;
-	};
-	instanceProto.onMouseMove = function(info)
-	{
-		if (!this.mouseDown)
-			return;
-		if (isCompatibilityMouseEvent(info))
-			return;
-		var t = { pageX: info.pageX, pageY: info.pageY, "identifier": 0 };
-		var fakeinfo = { changedTouches: [t] };
-		this.onTouchMove(fakeinfo);
-	};
-	instanceProto.onMouseUp = function(info)
-	{
-		if (info.preventDefault && this.runtime.had_a_click && !this.runtime.isMobile)
-			info.preventDefault();
-		this.runtime.had_a_click = true;
-		if (isCompatibilityMouseEvent(info))
-			return;
-		var t = { pageX: info.pageX, pageY: info.pageY, "identifier": 0 };
-		var fakeinfo = { changedTouches: [t] };
-		this.onTouchEnd(fakeinfo);
-		this.mouseDown = false;
-	};
-	instanceProto.tick2 = function()
-	{
-		var i, len, t;
-		var nowtime = cr.performance_now();
-		for (i = 0, len = this.touches.length; i < len; ++i)
-		{
-			t = this.touches[i];
-			if (t.time <= nowtime - 50)
-				t.lasttime = nowtime;
-			t.maybeTriggerHold(this, i);
-		}
-	};
-	function Cnds() {};
-	Cnds.prototype.OnTouchStart = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnTouchEnd = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.IsInTouch = function ()
-	{
-		return this.touches.length;
-	};
-	Cnds.prototype.OnTouchObject = function (type)
-	{
-		if (!type)
-			return false;
-		return this.runtime.testAndSelectCanvasPointOverlap(type, this.curTouchX, this.curTouchY, false);
-	};
-	var touching = [];
-	Cnds.prototype.IsTouchingObject = function (type)
-	{
-		if (!type)
-			return false;
-		var sol = type.getCurrentSol();
-		var instances = sol.getObjects();
-		var px, py;
-		var i, leni, j, lenj;
-		for (i = 0, leni = instances.length; i < leni; i++)
-		{
-			var inst = instances[i];
-			inst.update_bbox();
-			for (j = 0, lenj = this.touches.length; j < lenj; j++)
-			{
-				var touch = this.touches[j];
-				px = inst.layer.canvasToLayer(touch.x, touch.y, true);
-				py = inst.layer.canvasToLayer(touch.x, touch.y, false);
-				if (inst.contains_pt(px, py))
-				{
-					touching.push(inst);
-					break;
-				}
-			}
-		}
-		if (touching.length)
-		{
-			sol.select_all = false;
-			cr.shallowAssignArray(sol.instances, touching);
-			type.applySolToContainer();
-			cr.clearArray(touching);
-			return true;
-		}
-		else
-			return false;
-	};
-	Cnds.prototype.CompareTouchSpeed = function (index, cmp, s)
-	{
-		index = Math.floor(index);
-		if (index < 0 || index >= this.touches.length)
-			return false;
-		var t = this.touches[index];
-		var dist = cr.distanceTo(t.x, t.y, t.lastx, t.lasty);
-		var timediff = (t.time - t.lasttime) / 1000;
-		var speed = 0;
-		if (timediff > 0)
-			speed = dist / timediff;
-		return cr.do_cmp(speed, cmp, s);
-	};
-	Cnds.prototype.OrientationSupported = function ()
-	{
-		return typeof window["DeviceOrientationEvent"] !== "undefined";
-	};
-	Cnds.prototype.MotionSupported = function ()
-	{
-		return typeof window["DeviceMotionEvent"] !== "undefined";
-	};
-	Cnds.prototype.CompareOrientation = function (orientation_, cmp_, angle_)
-	{
-		var v = 0;
-		if (orientation_ === 0)
-			v = this.getAlpha();
-		else if (orientation_ === 1)
-			v = this.getBeta();
-		else
-			v = this.getGamma();
-		return cr.do_cmp(v, cmp_, angle_);
-	};
-	Cnds.prototype.CompareAcceleration = function (acceleration_, cmp_, angle_)
-	{
-		var v = 0;
-		if (acceleration_ === 0)
-			v = this.acc_g_x;
-		else if (acceleration_ === 1)
-			v = this.acc_g_y;
-		else if (acceleration_ === 2)
-			v = this.acc_g_z;
-		else if (acceleration_ === 3)
-			v = this.acc_x;
-		else if (acceleration_ === 4)
-			v = this.acc_y;
-		else if (acceleration_ === 5)
-			v = this.acc_z;
-		return cr.do_cmp(v, cmp_, angle_);
-	};
-	Cnds.prototype.OnNthTouchStart = function (touch_)
-	{
-		touch_ = Math.floor(touch_);
-		return touch_ === this.trigger_index;
-	};
-	Cnds.prototype.OnNthTouchEnd = function (touch_)
-	{
-		touch_ = Math.floor(touch_);
-		return touch_ === this.trigger_index;
-	};
-	Cnds.prototype.HasNthTouch = function (touch_)
-	{
-		touch_ = Math.floor(touch_);
-		return this.touches.length >= touch_ + 1;
-	};
-	Cnds.prototype.OnHoldGesture = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnTapGesture = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnDoubleTapGesture = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnHoldGestureObject = function (type)
-	{
-		if (!type)
-			return false;
-		return this.runtime.testAndSelectCanvasPointOverlap(type, this.curTouchX, this.curTouchY, false);
-	};
-	Cnds.prototype.OnTapGestureObject = function (type)
-	{
-		if (!type)
-			return false;
-		return this.runtime.testAndSelectCanvasPointOverlap(type, this.curTouchX, this.curTouchY, false);
-	};
-	Cnds.prototype.OnDoubleTapGestureObject = function (type)
-	{
-		if (!type)
-			return false;
-		return this.runtime.testAndSelectCanvasPointOverlap(type, this.curTouchX, this.curTouchY, false);
-	};
-	Cnds.prototype.OnPermissionGranted = function (type)
-	{
-		return this.trigger_permission === type;
-	};
-	Cnds.prototype.OnPermissionDenied = function (type)
-	{
-		return this.trigger_permission === type;
-	};
-	pluginProto.cnds = new Cnds();
-	function Acts() {};
-	Acts.prototype.RequestPermission = function (type)
-	{
-		var self = this;
-		var promise = Promise.resolve(true);
-		if (type === 0)		// orientation
-		{
-			if (window["DeviceOrientationEvent"] && window["DeviceOrientationEvent"]["requestPermission"])
-			{
-				promise = window["DeviceOrientationEvent"]["requestPermission"]()
-				.then(function (state)
-				{
-					return state === "granted";
-				});
-			}
-		}
-		else				// motion
-		{
-			if (window["DeviceMotionEvent"] && window["DeviceMotionEvent"]["requestPermission"])
-			{
-				promise = window["DeviceMotionEvent"]["requestPermission"]()
-				.then(function (state)
-				{
-					return state === "granted";
-				});
-			}
-		}
-		promise.then(function (result)
-		{
-			self.trigger_permission = type;
-			if (result)
-				self.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnPermissionGranted, self);
-			else
-				self.runtime.trigger(cr.plugins_.Touch.prototype.cnds.OnPermissionDenied, self);
-		});
-	};
-	pluginProto.acts = new Acts();
-	function Exps() {};
-	Exps.prototype.TouchCount = function (ret)
-	{
-		ret.set_int(this.touches.length);
-	};
-	Exps.prototype.X = function (ret, layerparam)
-	{
-		var index = this.getTouchIndex;
-		if (index < 0 || index >= this.touches.length)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var layer, oldScale, oldZoomRate, oldParallaxX, oldAngle;
-		if (cr.is_undefined(layerparam))
-		{
-			layer = this.runtime.getLayerByNumber(0);
-			oldScale = layer.scale;
-			oldZoomRate = layer.zoomRate;
-			oldParallaxX = layer.parallaxX;
-			oldAngle = layer.angle;
-			layer.scale = 1;
-			layer.zoomRate = 1.0;
-			layer.parallaxX = 1.0;
-			layer.angle = 0;
-			ret.set_float(layer.canvasToLayer(this.touches[index].x, this.touches[index].y, true));
-			layer.scale = oldScale;
-			layer.zoomRate = oldZoomRate;
-			layer.parallaxX = oldParallaxX;
-			layer.angle = oldAngle;
-		}
-		else
-		{
-			if (cr.is_number(layerparam))
-				layer = this.runtime.getLayerByNumber(layerparam);
-			else
-				layer = this.runtime.getLayerByName(layerparam);
-			if (layer)
-				ret.set_float(layer.canvasToLayer(this.touches[index].x, this.touches[index].y, true));
-			else
-				ret.set_float(0);
-		}
-	};
-	Exps.prototype.XAt = function (ret, index, layerparam)
-	{
-		index = Math.floor(index);
-		if (index < 0 || index >= this.touches.length)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var layer, oldScale, oldZoomRate, oldParallaxX, oldAngle;
-		if (cr.is_undefined(layerparam))
-		{
-			layer = this.runtime.getLayerByNumber(0);
-			oldScale = layer.scale;
-			oldZoomRate = layer.zoomRate;
-			oldParallaxX = layer.parallaxX;
-			oldAngle = layer.angle;
-			layer.scale = 1;
-			layer.zoomRate = 1.0;
-			layer.parallaxX = 1.0;
-			layer.angle = 0;
-			ret.set_float(layer.canvasToLayer(this.touches[index].x, this.touches[index].y, true));
-			layer.scale = oldScale;
-			layer.zoomRate = oldZoomRate;
-			layer.parallaxX = oldParallaxX;
-			layer.angle = oldAngle;
-		}
-		else
-		{
-			if (cr.is_number(layerparam))
-				layer = this.runtime.getLayerByNumber(layerparam);
-			else
-				layer = this.runtime.getLayerByName(layerparam);
-			if (layer)
-				ret.set_float(layer.canvasToLayer(this.touches[index].x, this.touches[index].y, true));
-			else
-				ret.set_float(0);
-		}
-	};
-	Exps.prototype.XForID = function (ret, id, layerparam)
-	{
-		var index = this.findTouch(id);
-		if (index < 0)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var touch = this.touches[index];
-		var layer, oldScale, oldZoomRate, oldParallaxX, oldAngle;
-		if (cr.is_undefined(layerparam))
-		{
-			layer = this.runtime.getLayerByNumber(0);
-			oldScale = layer.scale;
-			oldZoomRate = layer.zoomRate;
-			oldParallaxX = layer.parallaxX;
-			oldAngle = layer.angle;
-			layer.scale = 1;
-			layer.zoomRate = 1.0;
-			layer.parallaxX = 1.0;
-			layer.angle = 0;
-			ret.set_float(layer.canvasToLayer(touch.x, touch.y, true));
-			layer.scale = oldScale;
-			layer.zoomRate = oldZoomRate;
-			layer.parallaxX = oldParallaxX;
-			layer.angle = oldAngle;
-		}
-		else
-		{
-			if (cr.is_number(layerparam))
-				layer = this.runtime.getLayerByNumber(layerparam);
-			else
-				layer = this.runtime.getLayerByName(layerparam);
-			if (layer)
-				ret.set_float(layer.canvasToLayer(touch.x, touch.y, true));
-			else
-				ret.set_float(0);
-		}
-	};
-	Exps.prototype.Y = function (ret, layerparam)
-	{
-		var index = this.getTouchIndex;
-		if (index < 0 || index >= this.touches.length)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var layer, oldScale, oldZoomRate, oldParallaxY, oldAngle;
-		if (cr.is_undefined(layerparam))
-		{
-			layer = this.runtime.getLayerByNumber(0);
-			oldScale = layer.scale;
-			oldZoomRate = layer.zoomRate;
-			oldParallaxY = layer.parallaxY;
-			oldAngle = layer.angle;
-			layer.scale = 1;
-			layer.zoomRate = 1.0;
-			layer.parallaxY = 1.0;
-			layer.angle = 0;
-			ret.set_float(layer.canvasToLayer(this.touches[index].x, this.touches[index].y, false));
-			layer.scale = oldScale;
-			layer.zoomRate = oldZoomRate;
-			layer.parallaxY = oldParallaxY;
-			layer.angle = oldAngle;
-		}
-		else
-		{
-			if (cr.is_number(layerparam))
-				layer = this.runtime.getLayerByNumber(layerparam);
-			else
-				layer = this.runtime.getLayerByName(layerparam);
-			if (layer)
-				ret.set_float(layer.canvasToLayer(this.touches[index].x, this.touches[index].y, false));
-			else
-				ret.set_float(0);
-		}
-	};
-	Exps.prototype.YAt = function (ret, index, layerparam)
-	{
-		index = Math.floor(index);
-		if (index < 0 || index >= this.touches.length)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var layer, oldScale, oldZoomRate, oldParallaxY, oldAngle;
-		if (cr.is_undefined(layerparam))
-		{
-			layer = this.runtime.getLayerByNumber(0);
-			oldScale = layer.scale;
-			oldZoomRate = layer.zoomRate;
-			oldParallaxY = layer.parallaxY;
-			oldAngle = layer.angle;
-			layer.scale = 1;
-			layer.zoomRate = 1.0;
-			layer.parallaxY = 1.0;
-			layer.angle = 0;
-			ret.set_float(layer.canvasToLayer(this.touches[index].x, this.touches[index].y, false));
-			layer.scale = oldScale;
-			layer.zoomRate = oldZoomRate;
-			layer.parallaxY = oldParallaxY;
-			layer.angle = oldAngle;
-		}
-		else
-		{
-			if (cr.is_number(layerparam))
-				layer = this.runtime.getLayerByNumber(layerparam);
-			else
-				layer = this.runtime.getLayerByName(layerparam);
-			if (layer)
-				ret.set_float(layer.canvasToLayer(this.touches[index].x, this.touches[index].y, false));
-			else
-				ret.set_float(0);
-		}
-	};
-	Exps.prototype.YForID = function (ret, id, layerparam)
-	{
-		var index = this.findTouch(id);
-		if (index < 0)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var touch = this.touches[index];
-		var layer, oldScale, oldZoomRate, oldParallaxY, oldAngle;
-		if (cr.is_undefined(layerparam))
-		{
-			layer = this.runtime.getLayerByNumber(0);
-			oldScale = layer.scale;
-			oldZoomRate = layer.zoomRate;
-			oldParallaxY = layer.parallaxY;
-			oldAngle = layer.angle;
-			layer.scale = 1;
-			layer.zoomRate = 1.0;
-			layer.parallaxY = 1.0;
-			layer.angle = 0;
-			ret.set_float(layer.canvasToLayer(touch.x, touch.y, false));
-			layer.scale = oldScale;
-			layer.zoomRate = oldZoomRate;
-			layer.parallaxY = oldParallaxY;
-			layer.angle = oldAngle;
-		}
-		else
-		{
-			if (cr.is_number(layerparam))
-				layer = this.runtime.getLayerByNumber(layerparam);
-			else
-				layer = this.runtime.getLayerByName(layerparam);
-			if (layer)
-				ret.set_float(layer.canvasToLayer(touch.x, touch.y, false));
-			else
-				ret.set_float(0);
-		}
-	};
-	Exps.prototype.AbsoluteX = function (ret)
-	{
-		if (this.touches.length)
-			ret.set_float(this.touches[0].x);
-		else
-			ret.set_float(0);
-	};
-	Exps.prototype.AbsoluteXAt = function (ret, index)
-	{
-		index = Math.floor(index);
-		if (index < 0 || index >= this.touches.length)
-		{
-			ret.set_float(0);
-			return;
-		}
-		ret.set_float(this.touches[index].x);
-	};
-	Exps.prototype.AbsoluteXForID = function (ret, id)
-	{
-		var index = this.findTouch(id);
-		if (index < 0)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var touch = this.touches[index];
-		ret.set_float(touch.x);
-	};
-	Exps.prototype.AbsoluteY = function (ret)
-	{
-		if (this.touches.length)
-			ret.set_float(this.touches[0].y);
-		else
-			ret.set_float(0);
-	};
-	Exps.prototype.AbsoluteYAt = function (ret, index)
-	{
-		index = Math.floor(index);
-		if (index < 0 || index >= this.touches.length)
-		{
-			ret.set_float(0);
-			return;
-		}
-		ret.set_float(this.touches[index].y);
-	};
-	Exps.prototype.AbsoluteYForID = function (ret, id)
-	{
-		var index = this.findTouch(id);
-		if (index < 0)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var touch = this.touches[index];
-		ret.set_float(touch.y);
-	};
-	Exps.prototype.SpeedAt = function (ret, index)
-	{
-		index = Math.floor(index);
-		if (index < 0 || index >= this.touches.length)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var t = this.touches[index];
-		var dist = cr.distanceTo(t.x, t.y, t.lastx, t.lasty);
-		var timediff = (t.time - t.lasttime) / 1000;
-		if (timediff <= 0)
-			ret.set_float(0);
-		else
-			ret.set_float(dist / timediff);
-	};
-	Exps.prototype.SpeedForID = function (ret, id)
-	{
-		var index = this.findTouch(id);
-		if (index < 0)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var touch = this.touches[index];
-		var dist = cr.distanceTo(touch.x, touch.y, touch.lastx, touch.lasty);
-		var timediff = (touch.time - touch.lasttime) / 1000;
-		if (timediff <= 0)
-			ret.set_float(0);
-		else
-			ret.set_float(dist / timediff);
-	};
-	Exps.prototype.AngleAt = function (ret, index)
-	{
-		index = Math.floor(index);
-		if (index < 0 || index >= this.touches.length)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var t = this.touches[index];
-		ret.set_float(cr.to_degrees(cr.angleTo(t.lastx, t.lasty, t.x, t.y)));
-	};
-	Exps.prototype.AngleForID = function (ret, id)
-	{
-		var index = this.findTouch(id);
-		if (index < 0)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var touch = this.touches[index];
-		ret.set_float(cr.to_degrees(cr.angleTo(touch.lastx, touch.lasty, touch.x, touch.y)));
-	};
-	Exps.prototype.Alpha = function (ret)
-	{
-		ret.set_float(this.getAlpha());
-	};
-	Exps.prototype.Beta = function (ret)
-	{
-		ret.set_float(this.getBeta());
-	};
-	Exps.prototype.Gamma = function (ret)
-	{
-		ret.set_float(this.getGamma());
-	};
-	Exps.prototype.AccelerationXWithG = function (ret)
-	{
-		ret.set_float(this.acc_g_x);
-	};
-	Exps.prototype.AccelerationYWithG = function (ret)
-	{
-		ret.set_float(this.acc_g_y);
-	};
-	Exps.prototype.AccelerationZWithG = function (ret)
-	{
-		ret.set_float(this.acc_g_z);
-	};
-	Exps.prototype.AccelerationX = function (ret)
-	{
-		ret.set_float(this.acc_x);
-	};
-	Exps.prototype.AccelerationY = function (ret)
-	{
-		ret.set_float(this.acc_y);
-	};
-	Exps.prototype.AccelerationZ = function (ret)
-	{
-		ret.set_float(this.acc_z);
-	};
-	Exps.prototype.TouchIndex = function (ret)
-	{
-		ret.set_int(this.trigger_index);
-	};
-	Exps.prototype.TouchID = function (ret)
-	{
-		ret.set_float(this.trigger_id);
-	};
-	Exps.prototype.WidthForID = function (ret, id)
-	{
-		var index = this.findTouch(id);
-		if (index < 0)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var touch = this.touches[index];
-		ret.set_float(touch.width);
-	};
-	Exps.prototype.HeightForID = function (ret, id)
-	{
-		var index = this.findTouch(id);
-		if (index < 0)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var touch = this.touches[index];
-		ret.set_float(touch.height);
-	};
-	Exps.prototype.PressureForID = function (ret, id)
-	{
-		var index = this.findTouch(id);
-		if (index < 0)
-		{
-			ret.set_float(0);
-			return;
-		}
-		var touch = this.touches[index];
-		ret.set_float(touch.pressure);
-	};
-	pluginProto.exps = new Exps();
-}());
-/* Copyright (c) 2014 Intel Corporation. All rights reserved.
-* Use of this source code is governed by a MIT-style license that can be
-* found in the LICENSE file.
-*/
-;
-;
-cr.plugins_.admob = function(runtime)
-{
-	this.runtime = runtime;
-};
-(function ()
-{
-	var pluginProto = cr.plugins_.admob.prototype;
+	var pluginProto = cr.plugins_.Function.prototype;
 	pluginProto.Type = function(plugin)
 	{
 		this.plugin = plugin;
@@ -18542,1371 +16717,197 @@ cr.plugins_.admob = function(runtime)
 		this.runtime = type.runtime;
 	};
 	var instanceProto = pluginProto.Instance.prototype;
-	var isSupported = false;
-	instanceProto.onCreate = function()
+	var funcStack = [];
+	var funcStackPtr = -1;
+	var isInPreview = false;	// set in onCreate
+	function FuncStackEntry()
 	{
-		if (!window["admob"])
-		{
-			cr.logexport("[Construct 2] com.cranberrygame.phonegap.plugin.ad.admob plugin is required to show Admob ads with Cordova; other platforms are not supported");
-			return;
-		}
-		isSupported = true;
-		this.AdMob = window["admob"];
-		if (this.AdMob["setLicenseKey"])
-			this.AdMob["setLicenseKey"]("support@scirra.com", "2ba99d4ff8c219cf7331c88fb3344f80");
-		var overlap = (this.properties[0] !== 0);
-		var isTesting = (this.properties[1] !== 0);
-		this.androidBannerId = this.properties[2];
-		this.androidInterstitialId = this.properties[3];
-		this.iosBannerId = this.properties[4];
-		this.iosInterstitialId = this.properties[5];
-		this.wp8BannerId = this.properties[6];
-		this.wp8InterstitialId = this.properties[7];
-		if (this.runtime.isAndroid)
-		{
-			this.bannerId = this.androidBannerId;
-			this.interstitialId = this.androidInterstitialId;
-		}
-		else if (this.runtime.isiOS)
-		{
-			this.bannerId = this.iosBannerId;
-			this.interstitialId = this.iosInterstitialId;
-		}
-		else if (this.runtime.isWindowsPhone8 || this.runtime.isWindowsPhone81)
-		{
-			this.bannerId = this.wp8BannerId;
-			this.interstitialId = this.wp8InterstitialId;
-		}
-		else
-		{
-			this.bannerId = "";
-			this.interstitialId = "";
-		}
-		this.isShowingBannerAd = false;
-		this.isShowingInterstitial = false;
-		this.AdMob["setUp"](this.bannerId, this.interstitialId, overlap, isTesting);
-		var self = this;
-		this.AdMob["onFullScreenAdLoaded"] = function ()
-		{
-			self.runtime.trigger(cr.plugins_.admob.prototype.cnds.OnInterstitialReceived, self);
-		};
-		this.AdMob["onInterstitialAdLoaded"] = function ()
-		{
-			self.runtime.trigger(cr.plugins_.admob.prototype.cnds.OnInterstitialReceived, self);
-		};
-		this.AdMob["onFullScreenAdShown"] = function ()
-		{
-			self.isShowingInterstitial = true;
-			self.runtime.trigger(cr.plugins_.admob.prototype.cnds.OnInterstitialPresented, self);
-		};
-		this.AdMob["onInterstitialAdShown"] = function ()
-		{
-			self.isShowingInterstitial = true;
-			self.runtime.trigger(cr.plugins_.admob.prototype.cnds.OnInterstitialPresented, self);
-		};
-		this.AdMob["onFullScreenAdClosed"] = function ()
-		{
-			self.isShowingInterstitial = false;
-			self.runtime.trigger(cr.plugins_.admob.prototype.cnds.OnInterstitialDismissed, self);
-		};
-		this.AdMob["onInterstitialAdHidden"] = function ()
-		{
-			self.isShowingInterstitial = false;
-			self.runtime.trigger(cr.plugins_.admob.prototype.cnds.OnInterstitialDismissed, self);
-		};
-		this.AdMob["onBannerAdPreloaded"] = function ()
-		{
-			self.runtime.trigger(cr.plugins_.admob.prototype.cnds.OnBannerAdReceived, self);
-		};
+		this.name = "";
+		this.retVal = 0;
+		this.params = [];
 	};
-	function indexToAdSize(i)
+	function pushFuncStack()
 	{
-		switch (i) {
-		case 0:		return "SMART_BANNER";
-		case 1:		return "BANNER";
-		case 2:		return "MEDIUM_RECTANGLE";
-		case 3:		return "FULL_BANNER";
-		case 4:		return "LEADERBOARD";
-		case 5:		return "SKYSCRAPER";
-		}
-		return "SMART_BANNER";
+		funcStackPtr++;
+		if (funcStackPtr === funcStack.length)
+			funcStack.push(new FuncStackEntry());
+		return funcStack[funcStackPtr];
 	};
-	function indexToAdPosition(i)
+	function getCurrentFuncStack()
 	{
-		switch (i) {
-		case 0:		return "top-left";
-		case 1:		return "top-center";
-		case 2:		return "top-right";
-		case 3:		return "left";
-		case 4:		return "center";
-		case 5:		return "right";
-		case 6:		return "bottom-left";
-		case 7:		return "bottom-center";
-		case 8:		return "bottom-right";
-		}
-		return "bottom-center";
-	};
-	function Cnds() {};
-	Cnds.prototype.IsShowingBanner = function()
-	{
-		return this.isShowingBannerAd;
-	};
-	Cnds.prototype.IsShowingInterstitial = function()
-	{
-		return this.isShowingInterstitial;
-	};
-	Cnds.prototype.OnInterstitialReceived = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnInterstitialPresented = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnInterstitialDismissed = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnBannerAdReceived = function()
-	{
-		return true;
-	};
-	pluginProto.cnds = new Cnds();
-	function Acts() {};
-	Acts.prototype.ShowBanner = function (pos_, size_)
-	{
-		if (!isSupported)
-			return;
-		this.AdMob["showBannerAd"](indexToAdPosition(pos_), indexToAdSize(size_));
-		this.isShowingBannerAd = true;
-	};
-	Acts.prototype.AutoShowInterstitial = function ()
-	{
-		if (!isSupported)
-			return;
-		if (this.AdMob["showInterstitialAd"])
-			this.AdMob["showInterstitialAd"]();
-		else if (this.AdMob["showFullScreenAd"])
-			this.AdMob["showFullScreenAd"]();
-	};
-	Acts.prototype.PreloadInterstitial = function ()
-	{
-		if (!isSupported)
-			return;
-		if (this.AdMob["preloadInterstitialAd"])
-			this.AdMob["preloadInterstitialAd"]();
-		else if (this.AdMob["preloadFullScreenAd"])
-			this.AdMob["preloadFullScreenAd"]();
-	};
-	Acts.prototype.ShowInterstitial = function ()
-	{
-		if (!isSupported)
-			return;
-		if (this.AdMob["showInterstitialAd"])
-			this.AdMob["showInterstitialAd"]();
-		else if (this.AdMob["showFullScreenAd"])
-			this.AdMob["showFullScreenAd"]();
-	};
-	Acts.prototype.HideBanner = function ()
-	{
-		if (!isSupported)
-			return;
-		this.AdMob["hideBannerAd"]();
-		this.isShowingBannerAd = false;
-	};
-	Acts.prototype.ReloadInterstitial = function ()
-	{
-		if (!isSupported)
-			return;
-		if (this.AdMob["reloadInterstitialAd"])
-			this.AdMob["reloadInterstitialAd"]();
-		else if (this.AdMob["reloadFullScreenAd"])
-			this.AdMob["reloadFullScreenAd"]();
-	};
-	Acts.prototype.ReloadBanner = function ()
-	{
-		if (!isSupported)
-			return;
-		this.AdMob["reloadBannerAd"]();
-	};
-	Acts.prototype.PreloadBanner = function ()
-	{
-		if (!isSupported)
-			return;
-		this.AdMob["preloadBannerAd"]();
-	};
-	pluginProto.acts = new Acts();
-	function Exps() {};
-	pluginProto.exps = new Exps();
-}());
-;
-;
-cr.behaviors.Platform = function(runtime)
-{
-	this.runtime = runtime;
-};
-(function ()
-{
-	var behaviorProto = cr.behaviors.Platform.prototype;
-	behaviorProto.Type = function(behavior, objtype)
-	{
-		this.behavior = behavior;
-		this.objtype = objtype;
-		this.runtime = behavior.runtime;
-	};
-	var behtypeProto = behaviorProto.Type.prototype;
-	behtypeProto.onCreate = function()
-	{
-	};
-	var ANIMMODE_STOPPED = 0;
-	var ANIMMODE_MOVING = 1;
-	var ANIMMODE_JUMPING = 2;
-	var ANIMMODE_FALLING = 3;
-	behaviorProto.Instance = function(type, inst)
-	{
-		this.type = type;
-		this.behavior = type.behavior;
-		this.inst = inst;				// associated object instance to modify
-		this.runtime = type.runtime;
-		this.leftkey = false;
-		this.rightkey = false;
-		this.jumpkey = false;
-		this.jumped = false;			// prevent bunnyhopping
-		this.doubleJumped = false;
-		this.canDoubleJump = false;
-		this.ignoreInput = false;
-		this.simleft = false;
-		this.simright = false;
-		this.simjump = false;
-		this.lastFloorObject = null;
-		this.loadFloorObject = -1;
-		this.lastFloorX = 0;
-		this.lastFloorY = 0;
-		this.floorIsJumpthru = false;
-		this.animMode = ANIMMODE_STOPPED;
-		this.fallthrough = 0;			// fall through jump-thru.  >0 to disable, lasts a few ticks
-		this.firstTick = true;
-		this.dx = 0;
-		this.dy = 0;
-	};
-	var behinstProto = behaviorProto.Instance.prototype;
-	behinstProto.updateGravity = function()
-	{
-		this.downx = Math.cos(this.ga);
-		this.downy = Math.sin(this.ga);
-		this.rightx = Math.cos(this.ga - Math.PI / 2);
-		this.righty = Math.sin(this.ga - Math.PI / 2);
-		this.downx = cr.round6dp(this.downx);
-		this.downy = cr.round6dp(this.downy);
-		this.rightx = cr.round6dp(this.rightx);
-		this.righty = cr.round6dp(this.righty);
-		this.g1 = this.g;
-		if (this.g < 0)
-		{
-			this.downx *= -1;
-			this.downy *= -1;
-			this.g = Math.abs(this.g);
-		}
-	};
-	behinstProto.onCreate = function()
-	{
-		this.maxspeed = this.properties[0];
-		this.acc = this.properties[1];
-		this.dec = this.properties[2];
-		this.jumpStrength = this.properties[3];
-		this.g = this.properties[4];
-		this.g1 = this.g;
-		this.maxFall = this.properties[5];
-		this.enableDoubleJump = (this.properties[6] !== 0);	// 0=disabled, 1=enabled
-		this.jumpSustain = (this.properties[7] / 1000);		// convert ms to s
-		this.defaultControls = (this.properties[8] === 1);	// 0=no, 1=yes
-		this.enabled = (this.properties[9] !== 0);
-		this.wasOnFloor = false;
-		this.wasOverJumpthru = this.runtime.testOverlapJumpThru(this.inst);
-		this.loadOverJumpthru = -1;
-		this.sustainTime = 0;				// time of jump sustain remaining
-		this.ga = cr.to_radians(90);
-		this.updateGravity();
-		var self = this;
-		if (this.defaultControls && !this.runtime.isDomFree)
-		{
-			jQuery(document).keydown(function(info) {
-						self.onKeyDown(info);
-					});
-			jQuery(document).keyup(function(info) {
-						self.onKeyUp(info);
-					});
-		}
-		if (!this.recycled)
-		{
-			this.myDestroyCallback = function(inst) {
-										self.onInstanceDestroyed(inst);
-									};
-		}
-		this.runtime.addDestroyCallback(this.myDestroyCallback);
-		this.inst.extra["isPlatformBehavior"] = true;
-	};
-	behinstProto.saveToJSON = function ()
-	{
-		return {
-			"ii": this.ignoreInput,
-			"lfx": this.lastFloorX,
-			"lfy": this.lastFloorY,
-			"lfo": (this.lastFloorObject ? this.lastFloorObject.uid : -1),
-			"am": this.animMode,
-			"en": this.enabled,
-			"fall": this.fallthrough,
-			"ft": this.firstTick,
-			"dx": this.dx,
-			"dy": this.dy,
-			"ms": this.maxspeed,
-			"acc": this.acc,
-			"dec": this.dec,
-			"js": this.jumpStrength,
-			"g": this.g,
-			"g1": this.g1,
-			"mf": this.maxFall,
-			"wof": this.wasOnFloor,
-			"woj": (this.wasOverJumpthru ? this.wasOverJumpthru.uid : -1),
-			"ga": this.ga,
-			"edj": this.enableDoubleJump,
-			"cdj": this.canDoubleJump,
-			"dj": this.doubleJumped,
-			"sus": this.jumpSustain
-		};
-	};
-	behinstProto.loadFromJSON = function (o)
-	{
-		this.ignoreInput = o["ii"];
-		this.lastFloorX = o["lfx"];
-		this.lastFloorY = o["lfy"];
-		this.loadFloorObject = o["lfo"];
-		this.animMode = o["am"];
-		this.enabled = o["en"];
-		this.fallthrough = o["fall"];
-		this.firstTick = o["ft"];
-		this.dx = o["dx"];
-		this.dy = o["dy"];
-		this.maxspeed = o["ms"];
-		this.acc = o["acc"];
-		this.dec = o["dec"];
-		this.jumpStrength = o["js"];
-		this.g = o["g"];
-		this.g1 = o["g1"];
-		this.maxFall = o["mf"];
-		this.wasOnFloor = o["wof"];
-		this.loadOverJumpthru = o["woj"];
-		this.ga = o["ga"];
-		this.enableDoubleJump = o["edj"];
-		this.canDoubleJump = o["cdj"];
-		this.doubleJumped = o["dj"];
-		this.jumpSustain = o["sus"];
-		this.leftkey = false;
-		this.rightkey = false;
-		this.jumpkey = false;
-		this.jumped = false;
-		this.simleft = false;
-		this.simright = false;
-		this.simjump = false;
-		this.sustainTime = 0;
-		this.updateGravity();
-	};
-	behinstProto.afterLoad = function ()
-	{
-		if (this.loadFloorObject === -1)
-			this.lastFloorObject = null;
-		else
-			this.lastFloorObject = this.runtime.getObjectByUID(this.loadFloorObject);
-		if (this.loadOverJumpthru === -1)
-			this.wasOverJumpthru = null;
-		else
-			this.wasOverJumpthru = this.runtime.getObjectByUID(this.loadOverJumpthru);
-	};
-	behinstProto.onInstanceDestroyed = function (inst)
-	{
-		if (this.lastFloorObject == inst)
-			this.lastFloorObject = null;
-	};
-	behinstProto.onDestroy = function ()
-	{
-		this.lastFloorObject = null;
-		this.runtime.removeDestroyCallback(this.myDestroyCallback);
-	};
-	behinstProto.onKeyDown = function (info)
-	{
-		switch (info.which) {
-		case 38:	// up
-			info.preventDefault();
-			this.jumpkey = true;
-			break;
-		case 37:	// left
-			info.preventDefault();
-			this.leftkey = true;
-			break;
-		case 39:	// right
-			info.preventDefault();
-			this.rightkey = true;
-			break;
-		}
-	};
-	behinstProto.onKeyUp = function (info)
-	{
-		switch (info.which) {
-		case 38:	// up
-			info.preventDefault();
-			this.jumpkey = false;
-			this.jumped = false;
-			break;
-		case 37:	// left
-			info.preventDefault();
-			this.leftkey = false;
-			break;
-		case 39:	// right
-			info.preventDefault();
-			this.rightkey = false;
-			break;
-		}
-	};
-	behinstProto.onWindowBlur = function ()
-	{
-		this.leftkey = false;
-		this.rightkey = false;
-		this.jumpkey = false;
-	};
-	behinstProto.getGDir = function ()
-	{
-		if (this.g < 0)
-			return -1;
-		else
-			return 1;
-	};
-	behinstProto.isOnFloor = function ()
-	{
-		var ret = null;
-		var ret2 = null;
-		var i, len, j;
-		var oldx = this.inst.x;
-		var oldy = this.inst.y;
-		this.inst.x += this.downx;
-		this.inst.y += this.downy;
-		this.inst.set_bbox_changed();
-		if (this.lastFloorObject && this.runtime.testOverlap(this.inst, this.lastFloorObject) &&
-			(!this.runtime.typeHasBehavior(this.lastFloorObject.type, cr.behaviors.solid) || this.lastFloorObject.extra["solidEnabled"]))
-		{
-			this.inst.x = oldx;
-			this.inst.y = oldy;
-			this.inst.set_bbox_changed();
-			return this.lastFloorObject;
-		}
-		else
-		{
-			ret = this.runtime.testOverlapSolid(this.inst);
-			if (!ret && this.fallthrough === 0)
-				ret2 = this.runtime.testOverlapJumpThru(this.inst, true);
-			this.inst.x = oldx;
-			this.inst.y = oldy;
-			this.inst.set_bbox_changed();
-			if (ret)		// was overlapping solid
-			{
-				if (this.runtime.testOverlap(this.inst, ret))
-					return null;
-				else
-				{
-					this.floorIsJumpthru = false;
-					return ret;
-				}
-			}
-			if (ret2 && ret2.length)
-			{
-				for (i = 0, j = 0, len = ret2.length; i < len; i++)
-				{
-					ret2[j] = ret2[i];
-					if (!this.runtime.testOverlap(this.inst, ret2[i]))
-						j++;
-				}
-				if (j >= 1)
-				{
-					this.floorIsJumpthru = true;
-					return ret2[0];
-				}
-			}
+		if (funcStackPtr < 0)
 			return null;
-		}
+		return funcStack[funcStackPtr];
 	};
-	behinstProto.tick = function ()
+	function getOneAboveFuncStack()
 	{
+		if (!funcStack.length)
+			return null;
+		var i = funcStackPtr + 1;
+		if (i >= funcStack.length)
+			i = funcStack.length - 1;
+		return funcStack[i];
 	};
-	behinstProto.posttick = function ()
+	function popFuncStack()
 	{
-		var dt = this.runtime.getDt(this.inst);
-		var mx, my, obstacle, mag, allover, i, len, j, oldx, oldy;
-		if (!this.jumpkey && !this.simjump)
-			this.jumped = false;
-		var left = this.leftkey || this.simleft;
-		var right = this.rightkey || this.simright;
-		var jumpkey = (this.jumpkey || this.simjump);
-		var jump = jumpkey && !this.jumped;
-		this.simleft = false;
-		this.simright = false;
-		this.simjump = false;
-		if (!this.enabled)
-			return;
-		if (this.ignoreInput)
-		{
-			left = false;
-			right = false;
-			jumpkey = false;
-			jump = false;
-		}
-		if (!jumpkey)
-			this.sustainTime = 0;
-		var lastFloor = this.lastFloorObject;
-		var floor_moved = false;
-		if (this.firstTick)
-		{
-			if (this.runtime.testOverlapSolid(this.inst) || this.runtime.testOverlapJumpThru(this.inst))
-			{
-				this.runtime.pushOutSolid(this.inst, -this.downx, -this.downy, 4, true);
-			}
-			this.firstTick = false;
-		}
-		if (lastFloor && this.dy === 0 && (lastFloor.y !== this.lastFloorY || lastFloor.x !== this.lastFloorX))
-		{
-			mx = (lastFloor.x - this.lastFloorX);
-			my = (lastFloor.y - this.lastFloorY);
-			this.inst.x += mx;
-			this.inst.y += my;
-			this.inst.set_bbox_changed();
-			this.lastFloorX = lastFloor.x;
-			this.lastFloorY = lastFloor.y;
-			floor_moved = true;
-			if (this.runtime.testOverlapSolid(this.inst))
-			{
-				this.runtime.pushOutSolid(this.inst, -mx, -my, Math.sqrt(mx * mx + my * my) * 2.5);
-			}
-		}
-		var floor_ = this.isOnFloor();
-		var collobj = this.runtime.testOverlapSolid(this.inst);
-		if (collobj)
-		{
-			var instWidth = Math.abs(this.inst.width);
-			var instHeight = Math.abs(this.inst.height);
-			if (this.inst.extra["inputPredicted"])
-			{
-				this.runtime.pushOutSolid(this.inst, -this.downx, -this.downy, 10, false);
-			}
-			else if (this.runtime.pushOutSolidAxis(this.inst, -this.downx, -this.downy, instHeight / 8))
-			{
-				this.runtime.registerCollision(this.inst, collobj);
-			}
-			else if (this.runtime.pushOutSolidAxis(this.inst, this.rightx, this.righty, instWidth / 2))
-			{
-				this.runtime.registerCollision(this.inst, collobj);
-			}
-			else if (this.runtime.pushOutSolidAxis(this.inst, this.downx, this.downy, instHeight / 2))
-			{
-				this.runtime.registerCollision(this.inst, collobj);
-			}
-			else if (this.runtime.pushOutSolidNearest(this.inst, Math.max(instWidth, instHeight) / 2))
-			{
-				this.runtime.registerCollision(this.inst, collobj);
-			}
-			else
-				return;
-		}
-		if (floor_)
-		{
-			this.doubleJumped = false;		// reset double jump flags for next jump
-			this.canDoubleJump = false;
-			if (this.dy > 0)
-			{
-				if (!this.wasOnFloor)
-				{
-					this.runtime.pushInFractional(this.inst, -this.downx, -this.downy, floor_, 16);
-					this.wasOnFloor = true;
-				}
-				this.dy = 0;
-			}
-			if (lastFloor != floor_)
-			{
-				this.lastFloorObject = floor_;
-				this.lastFloorX = floor_.x;
-				this.lastFloorY = floor_.y;
-				this.runtime.registerCollision(this.inst, floor_);
-			}
-			else if (floor_moved)
-			{
-				collobj = this.runtime.testOverlapSolid(this.inst);
-				if (collobj)
-				{
-					this.runtime.registerCollision(this.inst, collobj);
-					if (mx !== 0)
-					{
-						if (mx > 0)
-							this.runtime.pushOutSolid(this.inst, -this.rightx, -this.righty);
-						else
-							this.runtime.pushOutSolid(this.inst, this.rightx, this.righty);
-					}
-					this.runtime.pushOutSolid(this.inst, -this.downx, -this.downy);
-				}
-			}
-		}
-		else
-		{
-			if (!jumpkey)
-				this.canDoubleJump = true;
-		}
-		if ((floor_ && jump) || (!floor_ && this.enableDoubleJump && jumpkey && this.canDoubleJump && !this.doubleJumped))
-		{
-			oldx = this.inst.x;
-			oldy = this.inst.y;
-			this.inst.x -= this.downx;
-			this.inst.y -= this.downy;
-			this.inst.set_bbox_changed();
-			if (!this.runtime.testOverlapSolid(this.inst))
-			{
-				this.sustainTime = this.jumpSustain;
-				this.runtime.trigger(cr.behaviors.Platform.prototype.cnds.OnJump, this.inst);
-				this.animMode = ANIMMODE_JUMPING;
-				this.dy = -this.jumpStrength;
-				jump = true;		// set in case is double jump
-				if (floor_)
-					this.jumped = true;
-				else
-					this.doubleJumped = true;
-			}
-			else
-				jump = false;
-			this.inst.x = oldx;
-			this.inst.y = oldy;
-			this.inst.set_bbox_changed();
-		}
-		if (!floor_)
-		{
-			if (jumpkey && this.sustainTime > 0)
-			{
-				this.dy = -this.jumpStrength;
-				this.sustainTime -= dt;
-			}
-			else
-			{
-				this.lastFloorObject = null;
-				this.dy += this.g * dt;
-				if (this.dy > this.maxFall)
-					this.dy = this.maxFall;
-			}
-			if (jump)
-				this.jumped = true;
-		}
-		this.wasOnFloor = !!floor_;
-		if (left == right)	// both up or both down
-		{
-			if (this.dx < 0)
-			{
-				this.dx += this.dec * dt;
-				if (this.dx > 0)
-					this.dx = 0;
-			}
-			else if (this.dx > 0)
-			{
-				this.dx -= this.dec * dt;
-				if (this.dx < 0)
-					this.dx = 0;
-			}
-		}
-		if (left && !right)
-		{
-			if (this.dx > 0)
-				this.dx -= (this.acc + this.dec) * dt;
-			else
-				this.dx -= this.acc * dt;
-		}
-		if (right && !left)
-		{
-			if (this.dx < 0)
-				this.dx += (this.acc + this.dec) * dt;
-			else
-				this.dx += this.acc * dt;
-		}
-		if (this.dx > this.maxspeed)
-			this.dx = this.maxspeed;
-		else if (this.dx < -this.maxspeed)
-			this.dx = -this.maxspeed;
-		var landed = false;
-		if (this.dx !== 0)
-		{
-			oldx = this.inst.x;
-			oldy = this.inst.y;
-			mx = this.dx * dt * this.rightx;
-			my = this.dx * dt * this.righty;
-			this.inst.x += this.rightx * (this.dx > 1 ? 1 : -1) - this.downx;
-			this.inst.y += this.righty * (this.dx > 1 ? 1 : -1) - this.downy;
-			this.inst.set_bbox_changed();
-			var is_jumpthru = false;
-			var slope_too_steep = this.runtime.testOverlapSolid(this.inst);
-			/*
-			if (!slope_too_steep && floor_)
-			{
-				slope_too_steep = this.runtime.testOverlapJumpThru(this.inst);
-				is_jumpthru = true;
-				if (slope_too_steep)
-				{
-					this.inst.x = oldx;
-					this.inst.y = oldy;
-					this.inst.set_bbox_changed();
-					if (this.runtime.testOverlap(this.inst, slope_too_steep))
-					{
-						slope_too_steep = null;
-						is_jumpthru = false;
-					}
-				}
-			}
-			*/
-			this.inst.x = oldx + mx;
-			this.inst.y = oldy + my;
-			this.inst.set_bbox_changed();
-			obstacle = this.runtime.testOverlapSolid(this.inst);
-			if (!obstacle && floor_)
-			{
-				obstacle = this.runtime.testOverlapJumpThru(this.inst);
-				if (obstacle)
-				{
-					this.inst.x = oldx;
-					this.inst.y = oldy;
-					this.inst.set_bbox_changed();
-					if (this.runtime.testOverlap(this.inst, obstacle))
-					{
-						obstacle = null;
-						is_jumpthru = false;
-					}
-					else
-						is_jumpthru = true;
-					this.inst.x = oldx + mx;
-					this.inst.y = oldy + my;
-					this.inst.set_bbox_changed();
-				}
-			}
-			if (obstacle)
-			{
-				var push_dist = Math.abs(this.dx * dt) + 2;
-				if (slope_too_steep || !this.runtime.pushOutSolid(this.inst, -this.downx, -this.downy, push_dist, is_jumpthru, obstacle))
-				{
-					this.runtime.registerCollision(this.inst, obstacle);
-					push_dist = Math.max(Math.abs(this.dx * dt * 2.5), 30);
-					if (!this.runtime.pushOutSolid(this.inst, this.rightx * (this.dx < 0 ? 1 : -1), this.righty * (this.dx < 0 ? 1 : -1), push_dist, false))
-					{
-						this.inst.x = oldx;
-						this.inst.y = oldy;
-						this.inst.set_bbox_changed();
-					}
-					else if (floor_ && !is_jumpthru && !this.floorIsJumpthru)
-					{
-						oldx = this.inst.x;
-						oldy = this.inst.y;
-						this.inst.x += this.downx;
-						this.inst.y += this.downy;
-						if (this.runtime.testOverlapSolid(this.inst))
-						{
-							if (!this.runtime.pushOutSolid(this.inst, -this.downx, -this.downy, 3, false))
-							{
-								this.inst.x = oldx;
-								this.inst.y = oldy;
-								this.inst.set_bbox_changed();
-							}
-						}
-						else
-						{
-							this.inst.x = oldx;
-							this.inst.y = oldy;
-							this.inst.set_bbox_changed();
-						}
-					}
-					if (!is_jumpthru)
-						this.dx = 0;	// stop
-				}
-				else if (!slope_too_steep && !jump && (Math.abs(this.dy) < Math.abs(this.jumpStrength / 4)))
-				{
-					this.dy = 0;
-					if (!floor_)
-						landed = true;
-				}
-			}
-			else
-			{
-				var newfloor = this.isOnFloor();
-				if (floor_ && !newfloor)
-				{
-					mag = Math.ceil(Math.abs(this.dx * dt)) + 2;
-					oldx = this.inst.x;
-					oldy = this.inst.y;
-					this.inst.x += this.downx * mag;
-					this.inst.y += this.downy * mag;
-					this.inst.set_bbox_changed();
-					if (this.runtime.testOverlapSolid(this.inst) || this.runtime.testOverlapJumpThru(this.inst))
-						this.runtime.pushOutSolid(this.inst, -this.downx, -this.downy, mag + 2, true);
-					else
-					{
-						this.inst.x = oldx;
-						this.inst.y = oldy;
-						this.inst.set_bbox_changed();
-					}
-				}
-				else if (newfloor)
-				{
-					if (!floor_ && this.floorIsJumpthru)
-					{
-						this.lastFloorObject = newfloor;
-						this.lastFloorX = newfloor.x;
-						this.lastFloorY = newfloor.y;
-						this.dy = 0;
-						landed = true;
-					}
-					if (this.dy === 0)
-					{
-						this.runtime.pushInFractional(this.inst, -this.downx, -this.downy, newfloor, 16);
-					}
-				}
-			}
-		}
-		if (this.dy !== 0)
-		{
-			oldx = this.inst.x;
-			oldy = this.inst.y;
-			this.inst.x += this.dy * dt * this.downx;
-			this.inst.y += this.dy * dt * this.downy;
-			var newx = this.inst.x;
-			var newy = this.inst.y;
-			this.inst.set_bbox_changed();
-			collobj = this.runtime.testOverlapSolid(this.inst);
-			var fell_on_jumpthru = false;
-			if (!collobj && (this.dy > 0) && !floor_)
-			{
-				allover = this.fallthrough > 0 ? null : this.runtime.testOverlapJumpThru(this.inst, true);
-				if (allover && allover.length)
-				{
-					if (this.wasOverJumpthru)
-					{
-						this.inst.x = oldx;
-						this.inst.y = oldy;
-						this.inst.set_bbox_changed();
-						for (i = 0, j = 0, len = allover.length; i < len; i++)
-						{
-							allover[j] = allover[i];
-							if (!this.runtime.testOverlap(this.inst, allover[i]))
-								j++;
-						}
-						allover.length = j;
-						this.inst.x = newx;
-						this.inst.y = newy;
-						this.inst.set_bbox_changed();
-					}
-					if (allover.length >= 1)
-						collobj = allover[0];
-				}
-				fell_on_jumpthru = !!collobj;
-			}
-			if (collobj)
-			{
-				this.runtime.registerCollision(this.inst, collobj);
-				this.sustainTime = 0;
-				var push_dist = (fell_on_jumpthru ? Math.abs(this.dy * dt * 2.5 + 10) : Math.max(Math.abs(this.dy * dt * 2.5 + 10), 30));
-				if (!this.runtime.pushOutSolid(this.inst, this.downx * (this.dy < 0 ? 1 : -1), this.downy * (this.dy < 0 ? 1 : -1), push_dist, fell_on_jumpthru, collobj))
-				{
-					this.inst.x = oldx;
-					this.inst.y = oldy;
-					this.inst.set_bbox_changed();
-					this.wasOnFloor = true;		// prevent adjustment for unexpected floor landings
-					if (!fell_on_jumpthru)
-						this.dy = 0;	// stop
-				}
-				else
-				{
-					this.lastFloorObject = collobj;
-					this.lastFloorX = collobj.x;
-					this.lastFloorY = collobj.y;
-					this.floorIsJumpthru = fell_on_jumpthru;
-					if (fell_on_jumpthru)
-						landed = true;
-					this.dy = 0;	// stop
-				}
-			}
-		}
-		if (this.animMode !== ANIMMODE_FALLING && this.dy > 0 && !floor_)
-		{
-			this.runtime.trigger(cr.behaviors.Platform.prototype.cnds.OnFall, this.inst);
-			this.animMode = ANIMMODE_FALLING;
-		}
-		if ((floor_ || landed) && this.dy >= 0)
-		{
-			if (this.animMode === ANIMMODE_FALLING || landed || (jump && this.dy === 0))
-			{
-				this.runtime.trigger(cr.behaviors.Platform.prototype.cnds.OnLand, this.inst);
-				if (this.dx === 0 && this.dy === 0)
-					this.animMode = ANIMMODE_STOPPED;
-				else
-					this.animMode = ANIMMODE_MOVING;
-			}
-			else
-			{
-				if (this.animMode !== ANIMMODE_STOPPED && this.dx === 0 && this.dy === 0)
-				{
-					this.runtime.trigger(cr.behaviors.Platform.prototype.cnds.OnStop, this.inst);
-					this.animMode = ANIMMODE_STOPPED;
-				}
-				if (this.animMode !== ANIMMODE_MOVING && (this.dx !== 0 || this.dy !== 0) && !jump)
-				{
-					this.runtime.trigger(cr.behaviors.Platform.prototype.cnds.OnMove, this.inst);
-					this.animMode = ANIMMODE_MOVING;
-				}
-			}
-		}
-		if (this.fallthrough > 0)
-			this.fallthrough--;
-		this.wasOverJumpthru = this.runtime.testOverlapJumpThru(this.inst);
-	};
-	function Cnds() {};
-	Cnds.prototype.IsMoving = function ()
-	{
-		return this.dx !== 0 || this.dy !== 0;
-	};
-	Cnds.prototype.CompareSpeed = function (cmp, s)
-	{
-		var speed = Math.sqrt(this.dx * this.dx + this.dy * this.dy);
-		return cr.do_cmp(speed, cmp, s);
-	};
-	Cnds.prototype.IsOnFloor = function ()
-	{
-		if (this.dy !== 0)
-			return false;
-		var ret = null;
-		var ret2 = null;
-		var i, len, j;
-		var oldx = this.inst.x;
-		var oldy = this.inst.y;
-		this.inst.x += this.downx;
-		this.inst.y += this.downy;
-		this.inst.set_bbox_changed();
-		ret = this.runtime.testOverlapSolid(this.inst);
-		if (!ret && this.fallthrough === 0)
-			ret2 = this.runtime.testOverlapJumpThru(this.inst, true);
-		this.inst.x = oldx;
-		this.inst.y = oldy;
-		this.inst.set_bbox_changed();
-		if (ret)		// was overlapping solid
-		{
-			return !this.runtime.testOverlap(this.inst, ret);
-		}
-		if (ret2 && ret2.length)
-		{
-			for (i = 0, j = 0, len = ret2.length; i < len; i++)
-			{
-				ret2[j] = ret2[i];
-				if (!this.runtime.testOverlap(this.inst, ret2[i]))
-					j++;
-			}
-			if (j >= 1)
-				return true;
-		}
-		return false;
-	};
-	Cnds.prototype.IsByWall = function (side)
-	{
-		var ret = false;
-		var oldx = this.inst.x;
-		var oldy = this.inst.y;
-		if (side === 0)		// left
-		{
-			this.inst.x -= this.rightx * 2;
-			this.inst.y -= this.righty * 2;
-		}
-		else
-		{
-			this.inst.x += this.rightx * 2;
-			this.inst.y += this.righty * 2;
-		}
-		this.inst.set_bbox_changed();
-		if (!this.runtime.testOverlapSolid(this.inst))
-		{
-			this.inst.x = oldx;
-			this.inst.y = oldy;
-			this.inst.set_bbox_changed();
-			return false;
-		}
-		this.inst.x -= this.downx * 3;
-		this.inst.y -= this.downy * 3;
-		this.inst.set_bbox_changed();
-		ret = this.runtime.testOverlapSolid(this.inst);
-		this.inst.x = oldx;
-		this.inst.y = oldy;
-		this.inst.set_bbox_changed();
-		return ret;
-	};
-	Cnds.prototype.IsJumping = function ()
-	{
-		return this.dy < 0;
-	};
-	Cnds.prototype.IsFalling = function ()
-	{
-		return this.dy > 0;
-	};
-	Cnds.prototype.OnJump = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnFall = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnStop = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnMove = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnLand = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.IsDoubleJumpEnabled = function ()
-	{
-		return this.enableDoubleJump;
-	};
-	behaviorProto.cnds = new Cnds();
-	function Acts() {};
-	Acts.prototype.SetIgnoreInput = function (ignoring)
-	{
-		this.ignoreInput = ignoring;
-	};
-	Acts.prototype.SetMaxSpeed = function (maxspeed)
-	{
-		this.maxspeed = maxspeed;
-		if (this.maxspeed < 0)
-			this.maxspeed = 0;
-	};
-	Acts.prototype.SetAcceleration = function (acc)
-	{
-		this.acc = acc;
-		if (this.acc < 0)
-			this.acc = 0;
-	};
-	Acts.prototype.SetDeceleration = function (dec)
-	{
-		this.dec = dec;
-		if (this.dec < 0)
-			this.dec = 0;
-	};
-	Acts.prototype.SetJumpStrength = function (js)
-	{
-		this.jumpStrength = js;
-		if (this.jumpStrength < 0)
-			this.jumpStrength = 0;
-	};
-	Acts.prototype.SetGravity = function (grav)
-	{
-		if (this.g1 === grav)
-			return;		// no change
-		this.g = grav;
-		this.updateGravity();
-		if (this.runtime.testOverlapSolid(this.inst))
-		{
-			this.runtime.pushOutSolid(this.inst, this.downx, this.downy, 10);
-			this.inst.x += this.downx * 2;
-			this.inst.y += this.downy * 2;
-			this.inst.set_bbox_changed();
-		}
-		this.lastFloorObject = null;
-	};
-	Acts.prototype.SetMaxFallSpeed = function (mfs)
-	{
-		this.maxFall = mfs;
-		if (this.maxFall < 0)
-			this.maxFall = 0;
-	};
-	Acts.prototype.SimulateControl = function (ctrl)
-	{
-		switch (ctrl) {
-		case 0:		this.simleft = true;	break;
-		case 1:		this.simright = true;	break;
-		case 2:		this.simjump = true;	break;
-		}
-	};
-	Acts.prototype.SetVectorX = function (vx)
-	{
-		this.dx = vx;
-	};
-	Acts.prototype.SetVectorY = function (vy)
-	{
-		this.dy = vy;
-	};
-	Acts.prototype.SetGravityAngle = function (a)
-	{
-		a = cr.to_radians(a);
-		a = cr.clamp_angle(a);
-		if (this.ga === a)
-			return;		// no change
-		this.ga = a;
-		this.updateGravity();
-		this.lastFloorObject = null;
-	};
-	Acts.prototype.SetEnabled = function (en)
-	{
-		if (this.enabled !== (en === 1))
-		{
-			this.enabled = (en === 1);
-			if (!this.enabled)
-				this.lastFloorObject = null;
-		}
-	};
-	Acts.prototype.FallThrough = function ()
-	{
-		var oldx = this.inst.x;
-		var oldy = this.inst.y;
-		this.inst.x += this.downx;
-		this.inst.y += this.downy;
-		this.inst.set_bbox_changed();
-		var overlaps = this.runtime.testOverlapJumpThru(this.inst, false);
-		this.inst.x = oldx;
-		this.inst.y = oldy;
-		this.inst.set_bbox_changed();
-		if (!overlaps)
-			return;
-		this.fallthrough = 3;			// disable jumpthrus for 3 ticks (1 doesn't do it, 2 does, 3 to be on safe side)
-		this.lastFloorObject = null;
-	};
-	Acts.prototype.SetDoubleJumpEnabled = function (e)
-	{
-		this.enableDoubleJump = (e !== 0);
-	};
-	Acts.prototype.SetJumpSustain = function (s)
-	{
-		this.jumpSustain = s / 1000;		// convert to ms
-	};
-	behaviorProto.acts = new Acts();
-	function Exps() {};
-	Exps.prototype.Speed = function (ret)
-	{
-		ret.set_float(Math.sqrt(this.dx * this.dx + this.dy * this.dy));
-	};
-	Exps.prototype.MaxSpeed = function (ret)
-	{
-		ret.set_float(this.maxspeed);
-	};
-	Exps.prototype.Acceleration = function (ret)
-	{
-		ret.set_float(this.acc);
-	};
-	Exps.prototype.Deceleration = function (ret)
-	{
-		ret.set_float(this.dec);
-	};
-	Exps.prototype.JumpStrength = function (ret)
-	{
-		ret.set_float(this.jumpStrength);
-	};
-	Exps.prototype.Gravity = function (ret)
-	{
-		ret.set_float(this.g);
-	};
-	Exps.prototype.GravityAngle = function (ret)
-	{
-		ret.set_float(cr.to_degrees(this.ga));
-	};
-	Exps.prototype.MaxFallSpeed = function (ret)
-	{
-		ret.set_float(this.maxFall);
-	};
-	Exps.prototype.MovingAngle = function (ret)
-	{
-		ret.set_float(cr.to_degrees(Math.atan2(this.dy, this.dx)));
-	};
-	Exps.prototype.VectorX = function (ret)
-	{
-		ret.set_float(this.dx);
-	};
-	Exps.prototype.VectorY = function (ret)
-	{
-		ret.set_float(this.dy);
-	};
-	Exps.prototype.JumpSustain = function (ret)
-	{
-		ret.set_float(this.jumpSustain * 1000);		// convert back to ms
-	};
-	behaviorProto.exps = new Exps();
-}());
 ;
-;
-cr.behaviors.scrollto = function(runtime)
-{
-	this.runtime = runtime;
-	this.shakeMag = 0;
-	this.shakeStart = 0;
-	this.shakeEnd = 0;
-	this.shakeMode = 0;
-};
-(function ()
-{
-	var behaviorProto = cr.behaviors.scrollto.prototype;
-	behaviorProto.Type = function(behavior, objtype)
-	{
-		this.behavior = behavior;
-		this.objtype = objtype;
-		this.runtime = behavior.runtime;
+		funcStackPtr--;
 	};
-	var behtypeProto = behaviorProto.Type.prototype;
-	behtypeProto.onCreate = function()
+	instanceProto.onCreate = function()
 	{
-	};
-	behaviorProto.Instance = function(type, inst)
-	{
-		this.type = type;
-		this.behavior = type.behavior;
-		this.inst = inst;				// associated object instance to modify
-		this.runtime = type.runtime;
-	};
-	var behinstProto = behaviorProto.Instance.prototype;
-	behinstProto.onCreate = function()
-	{
-		this.enabled = (this.properties[0] !== 0);
-	};
-	behinstProto.saveToJSON = function ()
-	{
-		return {
-			"smg": this.behavior.shakeMag,
-			"ss": this.behavior.shakeStart,
-			"se": this.behavior.shakeEnd,
-			"smd": this.behavior.shakeMode
+		isInPreview = (typeof cr_is_preview !== "undefined");
+		var self = this;
+		window["c2_callFunction"] = function (name_, params_)
+		{
+			var i, len, v;
+			var fs = pushFuncStack();
+			fs.name = name_.toLowerCase();
+			fs.retVal = 0;
+			if (params_)
+			{
+				fs.params.length = params_.length;
+				for (i = 0, len = params_.length; i < len; ++i)
+				{
+					v = params_[i];
+					if (typeof v === "number" || typeof v === "string")
+						fs.params[i] = v;
+					else if (typeof v === "boolean")
+						fs.params[i] = (v ? 1 : 0);
+					else
+						fs.params[i] = 0;
+				}
+			}
+			else
+			{
+				cr.clearArray(fs.params);
+			}
+			self.runtime.trigger(cr.plugins_.Function.prototype.cnds.OnFunction, self, fs.name);
+			popFuncStack();
+			return fs.retVal;
 		};
 	};
-	behinstProto.loadFromJSON = function (o)
-	{
-		this.behavior.shakeMag = o["smg"];
-		this.behavior.shakeStart = o["ss"];
-		this.behavior.shakeEnd = o["se"];
-		this.behavior.shakeMode = o["smd"];
-	};
-	behinstProto.tick = function ()
-	{
-	};
-	function getScrollToBehavior(inst)
-	{
-		var i, len, binst;
-		for (i = 0, len = inst.behavior_insts.length; i < len; ++i)
-		{
-			binst = inst.behavior_insts[i];
-			if (binst.behavior instanceof cr.behaviors.scrollto)
-				return binst;
-		}
-		return null;
-	};
-	behinstProto.tick2 = function ()
-	{
-		if (!this.enabled)
-			return;
-		var all = this.behavior.my_instances.valuesRef();
-		var sumx = 0, sumy = 0;
-		var i, len, binst, count = 0;
-		for (i = 0, len = all.length; i < len; i++)
-		{
-			binst = getScrollToBehavior(all[i]);
-			if (!binst || !binst.enabled)
-				continue;
-			sumx += all[i].x;
-			sumy += all[i].y;
-			++count;
-		}
-		var layout = this.inst.layer.layout;
-		var now = this.runtime.kahanTime.sum;
-		var offx = 0, offy = 0;
-		if (now >= this.behavior.shakeStart && now < this.behavior.shakeEnd)
-		{
-			var mag = this.behavior.shakeMag * Math.min(this.runtime.timescale, 1);
-			if (this.behavior.shakeMode === 0)
-				mag *= 1 - (now - this.behavior.shakeStart) / (this.behavior.shakeEnd - this.behavior.shakeStart);
-			var a = Math.random() * Math.PI * 2;
-			var d = Math.random() * mag;
-			offx = Math.cos(a) * d;
-			offy = Math.sin(a) * d;
-		}
-		layout.scrollToX(sumx / count + offx);
-		layout.scrollToY(sumy / count + offy);
-	};
-	function Acts() {};
-	Acts.prototype.Shake = function (mag, dur, mode)
-	{
-		this.behavior.shakeMag = mag;
-		this.behavior.shakeStart = this.runtime.kahanTime.sum;
-		this.behavior.shakeEnd = this.behavior.shakeStart + dur;
-		this.behavior.shakeMode = mode;
-	};
-	Acts.prototype.SetEnabled = function (e)
-	{
-		this.enabled = (e !== 0);
-	};
-	behaviorProto.acts = new Acts();
-}());
-;
-;
-cr.behaviors.solid = function(runtime)
-{
-	this.runtime = runtime;
-};
-(function ()
-{
-	var behaviorProto = cr.behaviors.solid.prototype;
-	behaviorProto.Type = function(behavior, objtype)
-	{
-		this.behavior = behavior;
-		this.objtype = objtype;
-		this.runtime = behavior.runtime;
-	};
-	var behtypeProto = behaviorProto.Type.prototype;
-	behtypeProto.onCreate = function()
-	{
-	};
-	behaviorProto.Instance = function(type, inst)
-	{
-		this.type = type;
-		this.behavior = type.behavior;
-		this.inst = inst;				// associated object instance to modify
-		this.runtime = type.runtime;
-	};
-	var behinstProto = behaviorProto.Instance.prototype;
-	behinstProto.onCreate = function()
-	{
-		this.inst.extra["solidEnabled"] = (this.properties[0] !== 0);
-	};
-	behinstProto.tick = function ()
-	{
-	};
 	function Cnds() {};
-	Cnds.prototype.IsEnabled = function ()
+	Cnds.prototype.OnFunction = function (name_)
 	{
-		return this.inst.extra["solidEnabled"];
+		var fs = getCurrentFuncStack();
+		if (!fs)
+			return false;
+		return cr.equals_nocase(name_, fs.name);
 	};
-	behaviorProto.cnds = new Cnds();
+	Cnds.prototype.CompareParam = function (index_, cmp_, value_)
+	{
+		var fs = getCurrentFuncStack();
+		if (!fs)
+			return false;
+		index_ = cr.floor(index_);
+		if (index_ < 0 || index_ >= fs.params.length)
+			return false;
+		return cr.do_cmp(fs.params[index_], cmp_, value_);
+	};
+	pluginProto.cnds = new Cnds();
 	function Acts() {};
-	Acts.prototype.SetEnabled = function (e)
+	Acts.prototype.CallFunction = function (name_, params_)
 	{
-		this.inst.extra["solidEnabled"] = !!e;
+		var fs = pushFuncStack();
+		fs.name = name_.toLowerCase();
+		fs.retVal = 0;
+		cr.shallowAssignArray(fs.params, params_);
+		var ran = this.runtime.trigger(cr.plugins_.Function.prototype.cnds.OnFunction, this, fs.name);
+		if (isInPreview && !ran)
+		{
+;
+		}
+		popFuncStack();
 	};
-	behaviorProto.acts = new Acts();
+	Acts.prototype.SetReturnValue = function (value_)
+	{
+		var fs = getCurrentFuncStack();
+		if (fs)
+			fs.retVal = value_;
+		else
+;
+	};
+	Acts.prototype.CallExpression = function (unused)
+	{
+	};
+	pluginProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.ReturnValue = function (ret)
+	{
+		var fs = getOneAboveFuncStack();
+		if (fs)
+			ret.set_any(fs.retVal);
+		else
+			ret.set_int(0);
+	};
+	Exps.prototype.ParamCount = function (ret)
+	{
+		var fs = getCurrentFuncStack();
+		if (fs)
+			ret.set_int(fs.params.length);
+		else
+		{
+;
+			ret.set_int(0);
+		}
+	};
+	Exps.prototype.Param = function (ret, index_)
+	{
+		index_ = cr.floor(index_);
+		var fs = getCurrentFuncStack();
+		if (fs)
+		{
+			if (index_ >= 0 && index_ < fs.params.length)
+			{
+				ret.set_any(fs.params[index_]);
+			}
+			else
+			{
+;
+				ret.set_int(0);
+			}
+		}
+		else
+		{
+;
+			ret.set_int(0);
+		}
+	};
+	Exps.prototype.Call = function (ret, name_)
+	{
+		var fs = pushFuncStack();
+		fs.name = name_.toLowerCase();
+		fs.retVal = 0;
+		cr.clearArray(fs.params);
+		var i, len;
+		for (i = 2, len = arguments.length; i < len; i++)
+			fs.params.push(arguments[i]);
+		var ran = this.runtime.trigger(cr.plugins_.Function.prototype.cnds.OnFunction, this, fs.name);
+		if (isInPreview && !ran)
+		{
+;
+		}
+		popFuncStack();
+		ret.set_any(fs.retVal);
+	};
+	pluginProto.exps = new Exps();
 }());
 cr.getObjectRefTable = function () { return [
-	cr.plugins_.CordovaAdmobPro,
-	cr.plugins_.admob,
-	cr.plugins_.Facebook,
 	cr.plugins_.Button,
-	cr.plugins_.Sprite,
-	cr.plugins_.Touch,
-	cr.behaviors.solid,
-	cr.behaviors.Platform,
-	cr.behaviors.scrollto,
-	cr.system_object.prototype.cnds.OnLayoutStart,
-	cr.plugins_.CordovaAdmobPro.prototype.acts.onlyLoadInterstitial,
+	cr.plugins_.Browser,
+	cr.plugins_.Facebook,
+	cr.plugins_.Function,
 	cr.plugins_.Button.prototype.cnds.OnClicked,
-	cr.plugins_.Facebook.prototype.acts.LogIn2,
-	cr.plugins_.Touch.prototype.cnds.OnTouchObject,
-	cr.system_object.prototype.acts.RestartLayout
+	cr.plugins_.Button.prototype.cnds.CompareInstanceVar,
+	cr.plugins_.Function.prototype.acts.CallFunction,
+	cr.system_object.prototype.cnds.IsGroupActive,
+	cr.plugins_.Function.prototype.cnds.OnFunction,
+	cr.plugins_.Function.prototype.cnds.CompareParam,
+	cr.system_object.prototype.acts.SetVar,
+	cr.plugins_.Function.prototype.exps.Param,
+	cr.plugins_.Browser.prototype.acts.ConsoleLog,
+	cr.plugins_.Browser.prototype.acts.Alert,
+	cr.system_object.prototype.cnds.Else,
+	cr.plugins_.Browser.prototype.acts.ExecJs,
+	cr.system_object.prototype.cnds.CompareVar
 ];};
