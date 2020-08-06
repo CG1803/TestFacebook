@@ -1,11 +1,8 @@
 ﻿<?xml version="1.0" encoding="UTF-8" ?>
-<widget id="com.phonegap.ZTPro" version="1.0.0.1" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
-	<name>ZTPro</name>
-    <description>
-        Hello World sample application that responds to the deviceready event.
-    </description>
+<widget id="180315000" version="1.0.0.1" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+	<name>Project ZT</name>
+	<description>A terrorist attack truns bad when special forces tried to stop the terrorists.</description>
 	<author email="glanguelale@umail.utm.ac.mu">Languelale Gimmal</author>
-
 
 	<icon src="www/icon-256.png" width="256" height="256" density="xxxhdpi" />
 	<icon src="www/icon-128.png" width="128" height="128" density="xhdpi" />
@@ -16,7 +13,6 @@
 	<preference name="fullscreen" value="true" />
 	<preference name="DisallowOverscroll" value="true" />
 	<preference name="AllowInlineMediaPlayback" value="true" />
-	<preference name="PhoneGap-version" value="cli-9.0.0" />
 
 	<config-file parent="UIStatusBarHidden" platform="ios" target="*-Info.plist"><true/></config-file>
 	<config-file parent="UIViewControllerBasedStatusBarAppearance" platform="ios" target="*-Info.plist"><false/></config-file>
@@ -25,18 +21,16 @@
 	<preference name="deployment-target" value="10.0" />
 	<preference name="android-minSdkVersion" value="21" />
 	<access origin="*" />
-	
-	<plugin name="cordova-plugin-admob-free">
-       <variable name="ADMOB_APP_ID" value="ca-app-pub-5798376424259255~7481263643" />
-    </plugin>
-    
-	<plugin name="cordova-plugin-facebook4">
-       <variable name="APP_ID" value="1220987571576879" />
-       <variable name="APP_NAME" value="ZTProject" />
-	   <variable name="FACEBOOK_HYBRID_APP_EVENTS" value="true" />
-    </plugin>
+
+	<plugin name="cordova-custom-config" />
+	<plugin name="cordova-plugin-ad-admob" />
+	<plugin name="cordova-plugin-file" />
+	<plugin name="cordova-plugin-inappbrowser" />
+	<plugin name="cordova-plugin-statusbar" />
+	<plugin name="cordova-plugin-whitelist" />
+	<plugin name="cordova-plugin-wkwebview-engine" />
 
 
-	<platform name="android" />
+	<engine name="ios" />
 	<engine name="android" />
 </widget>
