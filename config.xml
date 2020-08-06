@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="UTF-8" ?>
-<widget id="com.phonegap.testfacebook" version="1.0.0.2" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+<widget id="com.phonegap.testfacebook" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
 	<name>Project ZT</name>
 	<description>A terrorist attack truns bad when special forces tried to stop the terrorists.</description>
 	<author email="glanguelale@umail.utm.ac.mu">Languelale Gimmal</author>
@@ -9,25 +9,36 @@
 
 	<preference name="android-targetSdkVersion" value="28" />
 
-	<preference name="orientation" value="portrait" />
+	<preference name="orientation" value="default" />
 	<preference name="fullscreen" value="true" />
 	<preference name="DisallowOverscroll" value="true" />
 	<preference name="AllowInlineMediaPlayback" value="true" />
-	<preference name="PhoneGap-version" value="cli-9.0.0" />
+	<preference name="PhoneGap-version" value="cli-6.5.0" />
 
 	<config-file parent="UIStatusBarHidden" platform="ios" target="*-Info.plist"><true/></config-file>
 	<config-file parent="UIViewControllerBasedStatusBarAppearance" platform="ios" target="*-Info.plist"><false/></config-file>
 
 
-	<preference name="deployment-target" value="10.0" />
-	<preference name="android-minSdkVersion" value="21" />
+	<preference name="deployment-target" value="7.0" />
+	<preference name="android-minSdkVersion" value="15" />
 	<access origin="*" />
 	
 	<plugin name="cordova-plugin-facebook4">
        <variable name="APP_ID" value="1220987571576879" />
        <variable name="APP_NAME" value="ZTProject" />
 	</plugin>
-
+	
+	<allow-navigation href="http://*/*" />
+    <allow-navigation href="https://*/*" />
+    <allow-intent href="*" />
+    <allow-intent href="http://*/*" />
+    <allow-intent href="https://*/*" />
+    <allow-intent href="tel:*" />
+    <allow-intent href="sms:*" />
+    <allow-intent href="mailto:*" />
+    <allow-intent href="geo:*" />
+    <allow-intent href="fb:*" />
+    <allow-intent href="whatsapp:*" />
 
 	<platform name="android" />
 	<engine name="android" />
