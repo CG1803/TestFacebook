@@ -29,6 +29,7 @@
 
 	<plugin name="cordova-plugin-facebook4">
        <variable name="APP_ID" value="1220987571576879" />
+       <variable name="APP_NAME" value="ZTProject" />
 	   <variable name="FACEBOOK_HYBRID_APP_EVENTS" value="true" />
     </plugin>
 
