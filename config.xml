@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="UTF-8" ?>
-<widget id="com.ztproject.testfacebook" version="1.0.0.1" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+<widget id="com.phonegap.testfacebook" version="1.0.0.2" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
 	<name>Project ZT</name>
 	<description>A terrorist attack truns bad when special forces tried to stop the terrorists.</description>
 	<author email="glanguelale@umail.utm.ac.mu">Languelale Gimmal</author>
@@ -9,11 +9,10 @@
 
 	<preference name="android-targetSdkVersion" value="28" />
 
-	<preference name="orientation" value="portrait" />
+	<preference name="orientation" value="landscape" />
 	<preference name="fullscreen" value="true" />
 	<preference name="DisallowOverscroll" value="true" />
 	<preference name="AllowInlineMediaPlayback" value="true" />
-	<preference name="PhoneGap-version" value="cli-9.0.0" />
 
 	<config-file parent="UIStatusBarHidden" platform="ios" target="*-Info.plist"><true/></config-file>
 	<config-file parent="UIViewControllerBasedStatusBarAppearance" platform="ios" target="*-Info.plist"><false/></config-file>
@@ -21,18 +20,22 @@
 
 	<preference name="deployment-target" value="10.0" />
 	<preference name="android-minSdkVersion" value="21" />
-	<access origin="*" />
 	
-	<plugin name="cordova-plugin-admob-free">
-       <variable name="ADMOB_APP_ID" value="ca-app-pub-5798376424259255~7481263643" />
-    </plugin>
+	<access origin="*" />
 
+	<plugin name="cordova-custom-config" />
+	<plugin name="cordova-plugin-ad-admob" />
+	<plugin name="cordova-plugin-file" />
+	<plugin name="cordova-plugin-inappbrowser" />
+	<plugin name="cordova-plugin-statusbar" />
+	<plugin name="cordova-plugin-whitelist" />
+	<plugin name="cordova-plugin-wkwebview-engine" />
 	<plugin name="cordova-plugin-facebook4">
        <variable name="APP_ID" value="1220987571576879" />
        <variable name="APP_NAME" value="ZTProject" />
 	   <variable name="FACEBOOK_HYBRID_APP_EVENTS" value="true" />
     </plugin>
 
-	<platform name="android" />
+	
 	<engine name="android" />
 </widget>

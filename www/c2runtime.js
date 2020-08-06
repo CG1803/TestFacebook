@@ -19894,8 +19894,8 @@ cr.behaviors.solid = function(runtime)
 	behaviorProto.acts = new Acts();
 }());
 cr.getObjectRefTable = function () { return [
-	cr.plugins_.admob,
 	cr.plugins_.CordovaAdmobPro,
+	cr.plugins_.admob,
 	cr.plugins_.Facebook,
 	cr.plugins_.Button,
 	cr.plugins_.Sprite,
@@ -19906,9 +19906,7 @@ cr.getObjectRefTable = function () { return [
 	cr.system_object.prototype.cnds.OnLayoutStart,
 	cr.plugins_.CordovaAdmobPro.prototype.acts.onlyLoadInterstitial,
 	cr.plugins_.Button.prototype.cnds.OnClicked,
-	cr.plugins_.CordovaAdmobPro.prototype.acts.loadShowRewVid,
-	cr.plugins_.CordovaAdmobPro.prototype.acts.loadInterstitial,
+	cr.plugins_.Facebook.prototype.acts.LogIn2,
 	cr.plugins_.Touch.prototype.cnds.OnTouchObject,
-	cr.system_object.prototype.acts.RestartLayout,
-	cr.plugins_.Facebook.prototype.acts.LogIn2
+	cr.system_object.prototype.acts.RestartLayout
 ];};

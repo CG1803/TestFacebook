@@ -1,6 +1,6 @@
 ﻿{
-	"id": "180315000",
-	"version": "1.0.0.1",
+	"id": "com.phonegap.testfacebook",
+	"version": "1.0.0.2",
 	"name": "Project ZT",
 	"description": "A terrorist attack truns bad when special forces tried to stop the terrorists.",
 	"author": "Languelale Gimmal",
@@ -8,7 +8,7 @@
 	"website": "",
 	"fullscreen": "true",
 	"useragent": null,
-	"orientation": "portrait",
+	"orientation": "landscape",
 	"icons": [{
 		"src": "www/icon-256.png",
 		"width": 256,
